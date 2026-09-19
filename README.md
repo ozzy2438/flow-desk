@@ -18,6 +18,7 @@ Requires Node 22+, PostgreSQL and Redis (a `docker-compose.yml` is provided for 
 
 ```bash
 pnpm install
+pnpm exec playwright install chromium   # one-time browser download for the flow worker
 docker compose up -d          # or point DATABASE_URL / REDIS_URL at your own instances
 cp .env.example .env
 pnpm db:push                  # create the schema
@@ -25,6 +26,12 @@ pnpm db:seed                  # load a synthetic demo candidate profile + decisi
 pnpm dev                      # web app on http://localhost:3000
 pnpm worker                   # separate process: runs the Playwright flow workers
 ```
+
+If `pnpm worker` fails a flow with `browserType.launch: Executable doesn't exist`, the
+`playwright install` step above was skipped or ran before `pnpm install` finished - run it again.
+If you already have Postgres running locally for another project, `docker compose up -d` maps
+Postgres to host port 5433 (not the default 5432) specifically to avoid colliding with it; no
+existing service on your machine needs to be stopped.
 
 No API key is required for any of this: the decision provider, the cover-letter generator and the browser worker's source are all local/deterministic by default. See "Do I need Jev, OpenAI, Exa, Tavily or Apify?" below for what each optional key actually unlocks.
 
