@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+
+.badge-apply {
+  @apply badge bg-green-100 text-green-800;
+}
+
+.badge-review {
+  @apply badge bg-amber-100 text-amber-800;
+}
+
+.badge-skip {
+  @apply badge bg-slate-200 text-slate-600;
+}
+
+.card {
+  @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+}

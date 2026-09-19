@@ -9,6 +9,12 @@ coverage/
 !.env.example
 .DS_Store
 Thumbs.db
+*.tsbuildinfo
+.data/
+
+# CSVs the operator drops into data/ — real personal data, never committed by
+# the blueprint or the app itself.
+data/*.csv
 
 # Playwright
 playwright-report/
