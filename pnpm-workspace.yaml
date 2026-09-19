@@ -1,0 +1,16 @@
+packages:
+  - "."
+
+# Newer pnpm versions no longer read package.json's "pnpm.onlyBuiltDependencies"
+# (see https://pnpm.io/settings) - this is the field that replaced it. Kept
+# alongside the package.json field for older pnpm versions; both list the
+# same native-build packages (Prisma's client/engines/CLI, esbuild, and their
+# transitive native deps) so `prisma generate`'s postinstall actually runs
+# instead of being silently skipped with nothing queued for `approve-builds`.
+onlyBuiltDependencies:
+  - "@prisma/client"
+  - "@prisma/engines"
+  - esbuild
+  - msgpackr-extract
+  - prisma
+  - unrs-resolver
