@@ -14,12 +14,16 @@ function page(title: string, body: string): string {
   <title>${escapeHtml(title)}</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 720px; color: #1e293b; }
+    .search-form { display: flex; gap: 0.5rem; margin-bottom: 1.25rem; }
+    .search-form input { flex: 1; padding: 0.5rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.95rem; }
+    .search-form button { padding: 0.5rem 1rem; border: none; border-radius: 6px; background: #4338ca; color: #fff; font-size: 0.95rem; cursor: pointer; }
     .job-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem; }
     .job-title a { font-weight: 600; text-decoration: none; color: #4338ca; }
     .job-company, .job-location { color: #64748b; font-size: 0.9rem; }
     .job-detail-title { font-size: 1.4rem; margin-bottom: 0.25rem; }
     ul { padding-left: 1.2rem; }
     a.back { display: inline-block; margin-bottom: 1rem; color: #4338ca; }
+    .empty-state { color: #94a3b8; font-size: 0.9rem; }
   </style>
 </head>
 <body>${body}</body>
@@ -33,20 +37,40 @@ const LISTING_FILTERS: Record<string, (job: (typeof DEMO_JOBS)[number]) => boole
   contract: (job) => job.employmentType === "CONTRACT" || job.employmentType === "FIXED_TERM",
 };
 
-function renderListing(filter: string): string {
-  const predicate = LISTING_FILTERS[filter] ?? ALL_FILTER;
-  const jobs = DEMO_JOBS.filter(predicate);
-  const cards = jobs
-    .map(
-      (job) => `
+function renderListing(filter: string, query: string): string {
+  const categoryPredicate = LISTING_FILTERS[filter] ?? ALL_FILTER;
+  const queryLower = query.trim().toLowerCase();
+  const queryPredicate = (job: (typeof DEMO_JOBS)[number]) =>
+    queryLower.length === 0 ||
+    job.title.toLowerCase().includes(queryLower) ||
+    job.company.toLowerCase().includes(queryLower) ||
+    job.location.toLowerCase().includes(queryLower);
+
+  const jobs = DEMO_JOBS.filter((job) => categoryPredicate(job) && queryPredicate(job));
+  const cards = jobs.length
+    ? jobs
+        .map(
+          (job) => `
     <div class="job-card" data-job-id="${job.id}">
       <div class="job-title"><a href="/jobs/${job.id}">${escapeHtml(job.title)}</a></div>
       <div class="job-company">${escapeHtml(job.company)}</div>
       <div class="job-location">${escapeHtml(job.location)}</div>
     </div>`,
-    )
-    .join("\n");
-  return page("Flow Desk demo job board", `<h1>Open roles (${escapeHtml(filter)})</h1>\n${cards}`);
+        )
+        .join("\n")
+    : `<p class="empty-state">No roles match this search.</p>`;
+
+  const searchForm = `
+    <form class="search-form" method="GET" action="/jobs">
+      <input type="hidden" name="filter" value="${escapeHtml(filter)}" />
+      <input type="text" id="search-input" name="q" placeholder="Search roles, companies, locations..." value="${escapeHtml(query)}" />
+      <button type="submit" id="search-button">Search</button>
+    </form>`;
+
+  return page(
+    "Flow Desk demo job board",
+    `<h1>Open roles (${escapeHtml(filter)})</h1>\n${searchForm}\n${cards}`,
+  );
 }
 
 function renderDetail(job: (typeof DEMO_JOBS)[number]): string {
@@ -133,7 +157,7 @@ export async function ensureFixtureServer(): Promise<string> {
 
     if (url.pathname === "/jobs" || url.pathname === "/jobs/") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(renderListing(url.searchParams.get("filter") ?? "all"));
+      res.end(renderListing(url.searchParams.get("filter") ?? "all", url.searchParams.get("q") ?? ""));
       return;
     }
 

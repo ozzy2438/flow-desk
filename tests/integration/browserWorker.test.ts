@@ -24,7 +24,7 @@ EVIDENCE_GAP,EVIDENCE_GAP,requiredSkills,ALWAYS,,REVIEW,"gap",TRUE
 let userId: string;
 const createdRunIds: string[] = [];
 
-type FlowOverrides = Partial<{ maxPages: number; maxSteps: number; maxDurationSeconds: number }>;
+type FlowOverrides = Partial<{ maxPages: number; maxSteps: number; maxDurationSeconds: number; goal: string }>;
 
 async function createFlow(sourceId: string, overrides: FlowOverrides = {}) {
   const source = getSourceDefinition(sourceId)!;
@@ -107,6 +107,26 @@ describe("runFlow (real Playwright against the local fixture board)", () => {
       where: { flowId: flow.id, kind: "STOP", label: "Page budget reached" },
     });
     expect(stopEvent).not.toBeNull();
+  }, 30000);
+
+  it("types a search term into the job board's real search box and narrows results (TYPE_TEXT + CLICK)", async () => {
+    const flow = await createFlow("DEMO_BOARD_ALL", {
+      goal: "Find Data Scientist roles in Melbourne or remote.",
+    });
+    await runFlow(flow.id, userId);
+
+    const finished = await db.discoveryFlow.findUnique({ where: { id: flow.id } });
+    expect(finished?.status).toBe("COMPLETE");
+    // "data scientist" only matches one posting on the demo board.
+    expect(finished?.jobsDiscovered).toBe(1);
+
+    const events = await db.browserEvent.findMany({ where: { flowId: flow.id }, orderBy: { createdAt: "asc" } });
+    expect(events.some((e) => e.label.includes('Typing "data scientist"'))).toBe(true);
+    expect(events.some((e) => e.label.includes("Search results updated"))).toBe(true);
+
+    const jobs = await db.jobPosting.findMany({ where: { candidate: { flowId: flow.id } } });
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.title).toBe("Data Scientist");
   }, 30000);
 
   it("stops immediately and marks the flow CANCELLED when cancellation was already requested", async () => {

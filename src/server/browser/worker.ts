@@ -9,6 +9,7 @@ import { getExtractor } from "./extractors";
 import { assertDomainAllowed, DomainNotAllowedError } from "./domainGuard";
 import { detectUnsafePageState, UnsafePageStateError } from "./safetyChecks";
 import { acquireDomainSlot } from "./perDomainConcurrency";
+import { deriveSearchTerm } from "./deriveSearchTerm";
 import { rawJobInputSchema } from "../jobs/types";
 import { normalizeJobInput } from "../jobs/normalize";
 import { evaluateAndPersistJob } from "../jobs/evaluate";
@@ -99,6 +100,15 @@ async function isCancelled(flowId: string): Promise<boolean> {
   return flow?.cancellationRequested ?? false;
 }
 
+/**
+ * Short, deliberate pause after each meaningful step, purely so the live
+ * dashboard (screenshots + event timeline over SSE) is actually watchable -
+ * the fixture board has no real network latency, so without this every flow
+ * finishes in under a second. Not used for correctness anywhere; set to 0 to
+ * run at full speed (e.g. in CI).
+ */
+const STEP_PACE_MS = Number(process.env.BROWSER_STEP_PACE_MS ?? 350);
+
 function categorizeFailure(error: unknown): string {
   if (error instanceof DomainNotAllowedError) return "POLICY_BLOCKED";
   if (error instanceof UnsafePageStateError) return error.category;
@@ -161,11 +171,39 @@ export async function runFlow(flowId: string, userId: string): Promise<void> {
     await setStatus(flowId, "OPEN_PAGE");
     await guardedGoto(page, flow.startUrl, flow.allowedDomains);
     let pageCount = 1;
+    await page.waitForTimeout(STEP_PACE_MS); // paced for the live dashboard, not correctness
     const openScreenshot = await captureScreenshot(page, flowId, "Open source");
     let observation = await recordObservation(flowId, page, openScreenshot.id);
     await emitEvent(flowId, "OPEN_PAGE", `Opened ${observation.url}`, {
       screenshotId: openScreenshot.id,
     });
+
+    const searchTerm = deriveSearchTerm(flow.goal);
+    if (searchTerm && (await page.locator("#search-input").count()) > 0) {
+      await setStatus(flowId, "SEARCHING");
+      await emitEvent(flowId, "SEARCHING", `Typing "${searchTerm}" into the search box`);
+      await page.locator("#search-input").fill(searchTerm);
+      await page.waitForTimeout(STEP_PACE_MS);
+      const typedScreenshot = await captureScreenshot(page, flowId, `Search term entered: "${searchTerm}"`);
+      await emitEvent(flowId, "SEARCHING", `Entered search term "${searchTerm}"`, {
+        screenshotId: typedScreenshot.id,
+      });
+
+      const [searchResponse] = await Promise.all([
+        page.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        page.locator("#search-button").click(),
+      ]);
+      assertDomainAllowed(page.url(), flow.allowedDomains);
+      const unsafeAfterSearch = await detectUnsafePageState(page, searchResponse);
+      if (unsafeAfterSearch) throw unsafeAfterSearch;
+      pageCount++;
+      await page.waitForTimeout(STEP_PACE_MS);
+      const resultsScreenshot = await captureScreenshot(page, flowId, `Search results for "${searchTerm}"`);
+      observation = await recordObservation(flowId, page, resultsScreenshot.id);
+      await emitEvent(flowId, "SEARCHING", `Search results updated for "${searchTerm}"`, {
+        screenshotId: resultsScreenshot.id,
+      });
+    }
 
     await setStatus(flowId, "SEARCHING");
     const jobDetailPattern = /\/jobs\/[a-z0-9-]+$/;
@@ -201,6 +239,7 @@ export async function runFlow(flowId: string, userId: string): Promise<void> {
       await setStatus(flowId, "OPENING_JOB_DETAIL");
       await guardedGoto(page, link, flow.allowedDomains);
       pageCount++;
+      await page.waitForTimeout(STEP_PACE_MS);
       const detailScreenshot = await captureScreenshot(page, flowId, `Open job detail: ${link}`);
       observation = await recordObservation(flowId, page, detailScreenshot.id);
       if (!isObservationFresh(observation.observationVersion, observation)) {
@@ -213,6 +252,8 @@ export async function runFlow(flowId: string, userId: string): Promise<void> {
       });
 
       await setStatus(flowId, "EXTRACTING");
+      await page.mouse.wheel(0, 300);
+      await page.waitForTimeout(STEP_PACE_MS);
       const extracted = await extractor(page);
       const candidate = await db.extractedJobCandidate.create({
         data: { flowId, rawPayload: extracted, confidence: extracted.extractionConfidence },

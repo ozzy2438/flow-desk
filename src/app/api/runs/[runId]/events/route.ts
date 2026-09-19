@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const TERMINAL_RUN_STATUSES = new Set(["COMPLETED", "CANCELLED", "PARTIAL_FAILURE", "FAILED"]);
-const POLL_INTERVAL_MS = 1000;
+const POLL_INTERVAL_MS = 400;
 const MAX_STREAM_MS = 10 * 60 * 1000;
 
 async function loadRunSnapshot(runId: string) {
