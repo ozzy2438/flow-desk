@@ -1,6 +1,7 @@
 import { SOURCE_REGISTRY, ALL_ALLOWED_ACTIONS } from "../browser/sourceRegistry";
 import { getEnv } from "../env";
 import { discoveryFlowCandidateSchema, type DiscoveryFlowCandidate } from "./schema";
+import { parsePublicAtsBoardUrl } from "../jobSources/publicAts";
 
 /**
  * AGENCY_BRIEF.md Phase 2: turns a free-text goal into up to
@@ -14,11 +15,16 @@ import { discoveryFlowCandidateSchema, type DiscoveryFlowCandidate } from "./sch
 export async function planDiscoveryFlows(
   goal: string,
   requestedFlowCount: number,
+  sourceUrls: string[] = [],
 ): Promise<DiscoveryFlowCandidate[]> {
   const env = getEnv();
   const lowerGoal = goal.toLowerCase();
 
-  const ranked = [...SOURCE_REGISTRY].sort((a, b) => relevance(b.id, lowerGoal) - relevance(a.id, lowerGoal));
+  const configuredSources = sourceUrls.map(parsePublicAtsBoardUrl);
+  const availableSources = configuredSources.length > 0 ? configuredSources : SOURCE_REGISTRY;
+  const ranked = [...availableSources].sort(
+    (a, b) => relevance(b.id, lowerGoal) - relevance(a.id, lowerGoal),
+  );
   const selected = ranked.slice(0, Math.min(requestedFlowCount, ranked.length));
 
   const candidates = await Promise.all(

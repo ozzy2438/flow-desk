@@ -11,7 +11,7 @@ import type { NormalizedJobData } from "./normalize";
 
 export class PolicyNotConfiguredError extends Error {
   constructor() {
-    super("No active decision policy imported. Import decision-policy.csv first.");
+    super("No active decision policy imported. Import decision-policy.json or decision-policy.csv first.");
     this.name = "PolicyNotConfiguredError";
   }
 }
@@ -41,6 +41,13 @@ export async function evaluateAndPersistJob(
     isDuplicate: Boolean(duplicate),
     evidenceGapDetected: hasEvidenceGap(normalized.requiredSkills, activeProfile?.records ?? []),
   });
+
+  for (const uncertainty of normalized.eligibilityUncertainties) {
+    if (!deterministic.deepReviewReasons.includes(uncertainty)) {
+      deterministic.deepReviewReasons.push(uncertainty);
+      deterministic.explanationFacts.push(`SOURCE_ELIGIBILITY_UNCERTAIN: ${uncertainty}`);
+    }
+  }
 
   const provider = getDecisionProvider();
   let jevSignals: Awaited<ReturnType<typeof provider.evaluate>> | undefined;

@@ -5,6 +5,7 @@ import { useState } from "react";
 
 export function PolicyImportForm() {
   const router = useRouter();
+  const [format, setFormat] = useState<"json" | "csv">("json");
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
@@ -36,17 +37,47 @@ export function PolicyImportForm() {
 
   return (
     <form onSubmit={handleSubmit} className="card flex flex-col gap-3 p-5">
-      <h3 className="text-sm font-medium text-slate-700">Import decision policy</h3>
-      <label className="text-xs text-slate-500">
-        decision-policy.csv
-        <input
-          type="file"
-          name="policyCsv"
-          accept=".csv,text/csv"
-          required
-          className="mt-1 block w-full text-sm"
-        />
-      </label>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium text-slate-700">Import decision policy</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Use the native Apply OS JSON policy, or the original flat CSV rule format.
+          </p>
+        </div>
+        <select
+          value={format}
+          onChange={(event) => setFormat(event.target.value as "json" | "csv")}
+          className="rounded-md border border-slate-300 p-2 text-sm"
+          aria-label="Decision policy import format"
+        >
+          <option value="json">Apply OS JSON</option>
+          <option value="csv">Legacy CSV</option>
+        </select>
+      </div>
+
+      {format === "json" ? (
+        <label className="text-xs text-slate-500">
+          decision-policy.json
+          <input
+            type="file"
+            name="policyJson"
+            accept=".json,application/json"
+            required
+            className="mt-1 block w-full text-sm"
+          />
+        </label>
+      ) : (
+        <label className="text-xs text-slate-500">
+          decision-policy.csv
+          <input
+            type="file"
+            name="policyCsv"
+            accept=".csv,text/csv"
+            required
+            className="mt-1 block w-full text-sm"
+          />
+        </label>
+      )}
       <button
         type="submit"
         disabled={pending}

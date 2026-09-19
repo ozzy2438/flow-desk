@@ -12,6 +12,25 @@ Use Playwright for the actual browser contexts, pages, screenshots, traces and c
 
 ## Optional discovery and data providers
 
+### Built-in public ATS adapters
+
+Greenhouse Job Board API and Lever Postings API are the first live sources implemented in this
+repository. Both expose published jobs through unauthenticated public GET endpoints intended for
+careers pages:
+
+- Greenhouse: `GET https://boards-api.greenhouse.io/v1/boards/{board_token}/jobs`
+- Lever: `GET https://api.lever.co/v0/postings/{site}` (or the EU host)
+
+The operator supplies company-board URLs on each Research Run; Flow Desk normalizes them to the
+fixed vendor API hosts, filters by explicit role/location terms, fetches details sequentially per
+domain, stores source-verification facts and evaluates the results through the same policy/evidence
+pipeline. A public-feed result proves that the job was published when fetched. It does not prove a
+recent posting date unless the source exposes one.
+
+LinkedIn and SEEK are deliberately not treated as equivalent read APIs. Their partner APIs are for
+approved recruitment-software integrations and do not provide a general candidate-side search API.
+Use signed-in browser capture + full-JD paste for those sources; never reuse cookies in the worker.
+
 ### Exa or Tavily
 
 Use a semantic-search provider when you need discovery before browsing:
@@ -50,7 +69,7 @@ Prototype:
 Playwright + manually configured source registry + Jev demo provider
 
 First live version:
-Playwright + PostgreSQL + queue + Jev + generation provider
+Public Greenhouse/Lever adapters + PostgreSQL + queue + decision/generation providers
 
 Discovery expansion:
 Add Exa or Tavily for career-page and niche-source discovery

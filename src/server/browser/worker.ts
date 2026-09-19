@@ -15,6 +15,8 @@ import { normalizeJobInput } from "../jobs/normalize";
 import { evaluateAndPersistJob } from "../jobs/evaluate";
 import { syncResearchRunStatus } from "../researchRuns/syncStatus";
 import type { FlowStatus } from "@prisma/client";
+import { isPublicAtsBoardApiUrl } from "../jobSources/publicAts";
+import { runPublicAtsFlow } from "../jobSources/runPublicAtsFlow";
 
 class FlowCancelledError extends Error {}
 
@@ -146,6 +148,11 @@ export async function runFlow(flowId: string, userId: string): Promise<void> {
   const flow = await db.discoveryFlow.findUnique({ where: { id: flowId } });
   if (!flow) {
     logger.error("runFlow: flow not found", { flowId });
+    return;
+  }
+
+  if (isPublicAtsBoardApiUrl(flow.startUrl)) {
+    await runPublicAtsFlow(flow, userId);
     return;
   }
 

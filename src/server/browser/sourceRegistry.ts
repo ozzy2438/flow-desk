@@ -2,6 +2,7 @@ import { ensureFixtureServer } from "./fixtureServer";
 import { READ_ONLY_ALLOWED_ACTIONS } from "./actions";
 
 export type SourceDefinition = {
+  kind?: "BROWSER" | "PUBLIC_ATS";
   id: string;
   label: string;
   /** Resolves the approved start URL. Async because the fixture source boots a local server. */
@@ -55,4 +56,9 @@ export function getSourceDefinition(id: string): SourceDefinition | undefined {
 }
 
 export const ALL_ALLOWED_ACTIONS = READ_ONLY_ALLOWED_ACTIONS;
-export const ALLOWED_DOMAINS = ["127.0.0.1"];
+export const ALLOWED_DOMAINS = [
+  "127.0.0.1",
+  "boards-api.greenhouse.io",
+  "api.lever.co",
+  "api.eu.lever.co",
+];

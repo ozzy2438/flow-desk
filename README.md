@@ -35,7 +35,24 @@ existing service on your machine needs to be stopped.
 
 No API key is required for any of this: the decision provider, the cover-letter generator and the browser worker's source are all local/deterministic by default. See "Do I need Jev, OpenAI, Exa, Tavily or Apify?" below for what each optional key actually unlocks.
 
-Run the test suite with `pnpm test` (55 tests: policy engine, CSV import, evidence matching, claim-safety blocking, the queue, and real end-to-end Playwright runs against the bundled fixture job board - the same Postgres/Redis this quickstart sets up is what those integration tests run against).
+Run the test suite with `pnpm test` (policy engine, CSV/JSON import, public ATS URL import, evidence matching, claim-safety blocking, the queue, and real end-to-end Playwright runs against the bundled fixture job board - the same Postgres/Redis this quickstart sets up is what those integration tests run against).
+
+## Live job sources without unsafe scraping
+
+Flow Desk now has two explicit live-source paths:
+
+1. **Greenhouse and Lever company boards** — paste one public company-board URL per line into
+   **Live company boards** on the Research Run form. Each source becomes its own queued flow and
+   uses the ATS vendor's official, unauthenticated read API. Public feeds are checked at run time;
+   published-date and deadline evidence is stored separately from the employer's description.
+2. **LinkedIn, SEEK and other session-bound sources** — open the job in your normal signed-in
+   browser, then use **Job Inbox → Paste a LinkedIn, SEEK or other job** with the source URL and
+   full visible description. Flow Desk does not copy browser cookies, automate login, bypass
+   anti-bot controls, click Apply, or treat a search-card timestamp as authoritative.
+
+You can also paste an individual public Greenhouse or Lever job URL into **Job Inbox → Import a
+public job URL**. Unknown recency never becomes an Apply Candidate merely because the listing is
+currently open: a last-N-days goal with no verifiable published date is routed to Review Required.
 
 ## Where to start reading
 
@@ -52,8 +69,8 @@ Short answer: **no key is required to run this end to end.** Every external prov
 
 - **Decision provider** (role/skills/seniority fit, routing recommendation): a deterministic keyword-overlap heuristic (`src/server/decision/demoProvider.ts`) by default; set `JEV_API_KEY` to switch to the live Jev/TypeSafe provider. Both return the exact same validated shape.
 - **Cover-letter drafting**: a template generator that can only ever emit the job title/company and safe claims evidence matching already produced by default; set `OPENAI_API_KEY` to switch to live drafting. Every draft - from either provider - goes through the same claim-verification pipeline before it can reach Ready status.
-- **Browser worker**: always runs a real headless Chromium via Playwright, but only ever against the source registry (`src/server/browser/sourceRegistry.ts`), which ships with exactly one entry - a small job board this repo hosts itself locally. It never touches SEEK, LinkedIn, Indeed or any other live site; those all invest heavily in anti-bot controls that `docs/security.md` is explicit about not evading. Wiring a real source is a deliberate follow-up (see `docs/data-apis.md`'s rollout plan), done by adding an entry to the registry plus a matching extractor once you've reviewed that source's terms.
-- **Exa / Tavily / Apify**: not wired up. `docs/data-apis.md` covers when you'd want them (broadening discovery before the browser worker starts) and how to add them behind `JobSourceAdapter`.
+- **Browser worker and public ATS flows**: demo mode still uses isolated Playwright contexts against the bundled local board. A Research Run can additionally use operator-supplied Greenhouse or Lever company-board URLs through those vendors' official public GET APIs. LinkedIn, SEEK and other session-bound sources remain manual browser captures; Flow Desk never automates their login, CAPTCHA or Apply surfaces.
+- **Exa / Tavily / Apify**: not wired up. `docs/data-apis.md` covers when you'd want them for broader discovery. They are not required for the built-in Greenhouse/Lever public ATS path.
 
 ## Non-negotiable safety rules
 

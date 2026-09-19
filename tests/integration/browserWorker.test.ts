@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/server/db";
-import { getCurrentUser } from "@/server/auth";
 import { getSourceDefinition } from "@/server/browser/sourceRegistry";
 import { runFlow, closeSharedBrowser } from "@/server/browser/worker";
 import { closeFixtureServer } from "@/server/browser/fixtureServer";
@@ -52,19 +51,26 @@ async function createFlow(sourceId: string, overrides: FlowOverrides = {}) {
 }
 
 beforeAll(async () => {
-  const user = await getCurrentUser();
+  const user = await db.user.create({
+    data: { email: `browser-worker-${Date.now()}@flow-desk.test` },
+  });
   userId = user.id;
   await importCandidateProfile({ userId, profileCsvText: PROFILE_CSV, schemaCsvText: SCHEMA_CSV });
   await importDecisionPolicy({ userId, policyCsvText: POLICY_CSV });
 }, 30000);
 
 afterAll(async () => {
-  await db.jobPosting.deleteMany({ where: { source: { startsWith: "DEMO_BOARD" } } });
+  await db.jobPosting.deleteMany({
+    where: { candidate: { flow: { researchRun: { userId } } } },
+  });
   for (const runId of createdRunIds) {
     await db.researchRun.delete({ where: { id: runId } }).catch(() => {});
   }
   await closeSharedBrowser();
   await closeFixtureServer();
+  await db.candidateProfileImport.deleteMany({ where: { userId } });
+  await db.decisionPolicyImport.deleteMany({ where: { userId } });
+  await db.user.delete({ where: { id: userId } }).catch(() => {});
 }, 30000);
 
 describe("runFlow (real Playwright against the local fixture board)", () => {

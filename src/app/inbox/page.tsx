@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "@/server/db";
 import { getCurrentUser } from "@/server/auth";
 import { PasteJobForm } from "@/components/PasteJobForm";
+import { JobUrlImportForm } from "@/components/JobUrlImportForm";
 import { DecisionBadge } from "@/components/DecisionBadge";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,8 @@ export default async function InboxPage() {
           automatically; you can also evaluate one manually below.
         </p>
       </div>
+
+      <JobUrlImportForm />
 
       <PasteJobForm />
 

@@ -55,6 +55,11 @@ export type NormalizedJobData = {
   requiredSkills: string[];
   preferredSkills: string[];
   visaRequirements: string[];
+  sourceRetrievedAt: Date | null;
+  sourceOpenStatus: RawJobInput["sourceOpenStatus"];
+  postedAtBasis: RawJobInput["postedAtBasis"];
+  applicationDeadline: Date | null;
+  eligibilityUncertainties: string[];
   dedupeKey: string;
   ingestSource: string;
 };
@@ -80,6 +85,11 @@ export function normalizeJobInput(input: RawJobInput): NormalizedJobData {
     requiredSkills: input.requiredSkills,
     preferredSkills: input.preferredSkills,
     visaRequirements: input.visaRequirements,
+    sourceRetrievedAt: input.sourceRetrievedAt ? new Date(input.sourceRetrievedAt) : null,
+    sourceOpenStatus: input.sourceOpenStatus,
+    postedAtBasis: input.postedAtBasis,
+    applicationDeadline: input.applicationDeadline ? new Date(input.applicationDeadline) : null,
+    eligibilityUncertainties: input.eligibilityUncertainties,
     dedupeKey: computeDedupeKey(input),
     ingestSource: input.ingestSource,
   };

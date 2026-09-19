@@ -1,6 +1,10 @@
 # data/
 
-This folder holds the three CSVs that ground the entire product:
+The product accepts either the original three CSVs or the richer Apply OS JSON files:
+
+- `candidate-profile.json` + `candidate-profile.schema.json` — native evidence library,
+  `cv_usage`, `allowed_claims` and `claim_boundaries`, validated with JSON Schema.
+- `decision-policy.json` — native hard/soft constraints, ranking and claim-use policy.
 
 - `decision-policy.csv` — hard blockers, preferences, review triggers, wording rules, and thresholds.
 - `candidate-profile.csv` — canonical candidate facts, evidence library, verified projects.
@@ -11,13 +15,14 @@ This folder holds the three CSVs that ground the entire product:
 Use the in-app importers, not a manual file drop — they validate every row and version each
 import instead of silently overwriting the last one:
 
-1. Run the app (`pnpm dev`), then open **Candidate Profile** and upload `candidate-profile.schema.csv`
-   and `candidate-profile.csv` together.
-2. Open **Policy Inspector** and upload `decision-policy.csv`.
+1. Run the app (`pnpm dev`), then open **Candidate Profile** and choose **Apply OS JSON** to upload
+   `candidate-profile.schema.json` and `candidate-profile.json` together. Use **Legacy CSV** only
+   for the original flat format.
+2. Open **Policy Inspector** and upload `decision-policy.json` (or choose **Legacy CSV**).
 3. A failed import is stored (for the error report shown on that page) but never activated —
    evaluation keeps running against the last valid version until you fix and re-upload.
 
-Files never touch git: `data/*.csv` is gitignored, and each import is versioned inside Postgres
+Files never touch git: `data/*.csv` and `data/*.json` are gitignored, and each import is versioned inside Postgres
 (`CandidateProfileImport`, `DecisionPolicyImport`) with a source-file hash, not as a file on disk.
 
 No files uploaded yet? Run `pnpm db:seed` to load a synthetic demo profile and policy from

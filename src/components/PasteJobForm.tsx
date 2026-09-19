@@ -67,7 +67,7 @@ export function PasteJobForm() {
   return (
     <form onSubmit={handleSubmit} className="card flex flex-col gap-3 p-5">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-slate-700">Paste a job manually</h3>
+        <h3 className="text-sm font-medium text-slate-700">Paste a LinkedIn, SEEK or other job</h3>
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}

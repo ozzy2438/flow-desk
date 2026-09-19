@@ -67,6 +67,22 @@ export default async function JobDetailPage({
         />
       </div>
 
+      <div className="card p-4 text-xs text-slate-600">
+        <p className="font-medium text-slate-700">Source verification</p>
+        <p className="mt-1">
+          Open status: {job.sourceOpenStatus}
+          {job.sourceRetrievedAt
+            ? ` · checked ${new Date(job.sourceRetrievedAt).toLocaleString()}`
+            : " · not independently checked"}
+        </p>
+        <p className="mt-1">
+          Posted date: {job.postedAt ? new Date(job.postedAt).toLocaleString() : "Unknown"} · basis: {job.postedAtBasis}
+          {job.applicationDeadline
+            ? ` · deadline ${new Date(job.applicationDeadline).toLocaleString()}`
+            : ""}
+        </p>
+      </div>
+
       {job.evaluation && (
         <div className="card p-5">
           <h2 className="text-sm font-medium text-slate-700">

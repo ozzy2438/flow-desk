@@ -28,7 +28,11 @@ export const rawJobInputSchema = z.object({
   workplaceType: z.enum(WORKPLACE_TYPES).default("UNKNOWN"),
   employmentType: z.enum(EMPLOYMENT_TYPES).default("UNKNOWN"),
   seniority: z.enum(SENIORITIES).default("UNKNOWN"),
-  postedAt: z.string().datetime().optional().or(z.literal("").transform(() => undefined)),
+  postedAt: z
+    .string()
+    .datetime({ offset: true })
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
   salaryMin: z.number().nonnegative().optional(),
   salaryMax: z.number().nonnegative().optional(),
   salaryCurrency: z.string().optional(),
@@ -37,6 +41,11 @@ export const rawJobInputSchema = z.object({
   requiredSkills: z.array(z.string()).default([]),
   preferredSkills: z.array(z.string()).default([]),
   visaRequirements: z.array(z.string()).default([]),
+  sourceRetrievedAt: z.string().datetime().optional(),
+  sourceOpenStatus: z.enum(["OPEN", "UNKNOWN"]).default("UNKNOWN"),
+  postedAtBasis: z.enum(["FIRST_PUBLISHED", "SOURCE_REPORTED", "UNKNOWN"]).default("UNKNOWN"),
+  applicationDeadline: z.string().datetime({ offset: true }).optional(),
+  eligibilityUncertainties: z.array(z.string()).default([]),
   extractionConfidence: z.number().min(0).max(1).default(1),
   ingestSource: z.enum(["PASTED", "BROWSER_FLOW", "URL_IMPORT"]).default("PASTED"),
 });

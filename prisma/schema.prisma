@@ -299,6 +299,11 @@ model JobPosting {
   requiredSkills    String[]
   preferredSkills   String[]
   visaRequirements  String[]
+  sourceRetrievedAt DateTime?
+  sourceOpenStatus  String   @default("UNKNOWN")
+  postedAtBasis     String   @default("UNKNOWN")
+  applicationDeadline DateTime?
+  eligibilityUncertainties String[]
   dedupeKey         String
   ingestSource      String @default("BROWSER_FLOW")
   createdAt         DateTime @default(now())

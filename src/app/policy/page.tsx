@@ -50,7 +50,7 @@ export default async function PolicyInspectorPage() {
 
       {!active ? (
         <p className="text-sm text-slate-500">
-          No active policy yet. Import decision-policy.csv above, or run{" "}
+          No active policy yet. Import decision-policy.json or the legacy CSV above, or run{" "}
           <code className="rounded bg-slate-100 px-1">pnpm db:seed</code> to load the demo policy.
         </p>
       ) : (

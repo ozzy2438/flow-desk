@@ -9,7 +9,7 @@ function candidate(overrides: Record<string, unknown> = {}) {
     startUrl: "http://127.0.0.1:4000/jobs",
     goal: "Discover roles.",
     stopCondition: "Listing exhausted.",
-    allowedDomains: ALLOWED_DOMAINS,
+    allowedDomains: [ALLOWED_DOMAINS[0]],
     allowedActions: ["CLICK", "SCROLL", "OPEN_JOB_DETAIL", "EXTRACT_JOB", "STOP"],
     maxPages: 3,
     maxSteps: 20,
@@ -67,5 +67,20 @@ describe("planRequestSchema", () => {
 
   it("requires a minimum goal length", () => {
     expect(planRequestSchema.safeParse({ goal: "short", requestedFlowCount: 3 }).success).toBe(false);
+  });
+
+  it("accepts at most ten live source URLs", () => {
+    const sourceUrls = Array.from({ length: 10 }, (_, index) => `https://jobs.lever.co/acme${index}`);
+    expect(
+      planRequestSchema.safeParse({ goal: "Find data roles", requestedFlowCount: 3, sourceUrls })
+        .success,
+    ).toBe(true);
+    expect(
+      planRequestSchema.safeParse({
+        goal: "Find data roles",
+        requestedFlowCount: 3,
+        sourceUrls: [...sourceUrls, "https://jobs.lever.co/extra"],
+      }).success,
+    ).toBe(false);
   });
 });

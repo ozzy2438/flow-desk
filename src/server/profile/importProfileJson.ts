@@ -109,7 +109,7 @@ export async function importCandidateProfileJson({
   });
   const nextVersion = (lastImport?.version ?? 0) + 1;
 
-  let recordsToCreate: Array<{
+  const recordsToCreate: Array<{
     evidenceId: string | null;
     kind: string;
     title: string | null;

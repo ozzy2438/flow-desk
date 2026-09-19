@@ -4,6 +4,7 @@ import { db } from "@/server/db";
 import { planRequestSchema } from "@/server/planner/schema";
 import { planDiscoveryFlows } from "@/server/planner/planner";
 import { enqueueFlow } from "@/server/queue/queue";
+import { UnsupportedJobUrlError } from "@/server/jobs/urlImport";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -16,13 +17,22 @@ export async function POST(request: Request) {
   }
 
   const user = await getCurrentUser();
-  const { goal, requestedFlowCount } = parsed.data;
+  const { goal, requestedFlowCount, sourceUrls } = parsed.data;
 
   const run = await db.researchRun.create({
     data: { userId: user.id, userGoal: goal, requestedFlowCount, status: "PLANNING" },
   });
 
-  const candidates = await planDiscoveryFlows(goal, requestedFlowCount);
+  let candidates;
+  try {
+    candidates = await planDiscoveryFlows(goal, requestedFlowCount, sourceUrls);
+  } catch (error) {
+    await db.researchRun.update({ where: { id: run.id }, data: { status: "FAILED" } });
+    if (error instanceof UnsupportedJobUrlError) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: 422 });
+    }
+    throw error;
+  }
 
   if (candidates.length === 0) {
     await db.researchRun.update({ where: { id: run.id }, data: { status: "FAILED" } });

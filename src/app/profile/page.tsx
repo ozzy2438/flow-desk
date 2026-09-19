@@ -43,7 +43,7 @@ export default async function ProfilePage() {
 
       {!active ? (
         <p className="text-sm text-slate-500">
-          No active candidate profile yet. Import the three CSVs above, or run{" "}
+          No active candidate profile yet. Import the JSON pair or legacy CSV pair above, or run{" "}
           <code className="rounded bg-slate-100 px-1">pnpm db:seed</code> to load the demo profile.
         </p>
       ) : (

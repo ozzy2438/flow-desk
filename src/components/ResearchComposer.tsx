@@ -10,6 +10,7 @@ export function ResearchComposer() {
   const router = useRouter();
   const [goal, setGoal] = useState("");
   const [flowCount, setFlowCount] = useState(3);
+  const [sourceUrls, setSourceUrls] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,7 +26,14 @@ export function ResearchComposer() {
       const res = await fetch("/api/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal, requestedFlowCount: flowCount }),
+        body: JSON.stringify({
+          goal,
+          requestedFlowCount: flowCount,
+          sourceUrls: sourceUrls
+            .split(/\r?\n/)
+            .map((value) => value.trim())
+            .filter(Boolean),
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -54,6 +62,24 @@ export function ResearchComposer() {
           rows={4}
           className="mt-1 w-full rounded-md border border-slate-300 p-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
+      </div>
+
+      <div>
+        <label htmlFor="sourceUrls" className="text-sm font-medium text-slate-700">
+          Live company boards <span className="font-normal text-slate-400">(optional)</span>
+        </label>
+        <textarea
+          id="sourceUrls"
+          value={sourceUrls}
+          onChange={(event) => setSourceUrls(event.target.value)}
+          placeholder={"One public Greenhouse or Lever company board URL per line\nhttps://job-boards.greenhouse.io/company\nhttps://jobs.lever.co/company"}
+          rows={3}
+          className="mt-1 w-full rounded-md border border-slate-300 p-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        />
+        <p className="mt-1 text-xs text-slate-400">
+          If supplied, the run uses only these official public ATS sources. LinkedIn and SEEK jobs
+          are captured from the signed-in browser through Job Inbox, never scraped unattended.
+        </p>
       </div>
 
       <div className="flex items-center gap-3">

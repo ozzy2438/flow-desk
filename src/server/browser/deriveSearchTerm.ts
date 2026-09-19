@@ -9,8 +9,12 @@
  */
 const ROLE_KEYWORDS = [
   "data scientist",
+  "data engineer",
+  "analytics engineer",
+  "data analyst",
   "applied ai",
   "ai engineer",
+  "machine learning",
   "frontend",
   "front-end",
   "automation",
@@ -18,10 +22,15 @@ const ROLE_KEYWORDS = [
   "java",
   "backend",
   "back-end",
+  "full-stack",
+  "full stack",
 ];
 
 export function deriveSearchTerm(goalText: string): string | null {
+  return deriveSearchTerms(goalText)[0] ?? null;
+}
+
+export function deriveSearchTerms(goalText: string): string[] {
   const lower = goalText.toLowerCase();
-  const match = ROLE_KEYWORDS.find((keyword) => lower.includes(keyword));
-  return match ?? null;
+  return ROLE_KEYWORDS.filter((keyword) => lower.includes(keyword));
 }

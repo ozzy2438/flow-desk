@@ -7,6 +7,14 @@ packages:
 # same native-build packages (Prisma's client/engines/CLI, esbuild, and their
 # transitive native deps) so `prisma generate`'s postinstall actually runs
 # instead of being silently skipped with nothing queued for `approve-builds`.
+allowBuilds:
+  "@prisma/client": true
+  "@prisma/engines": true
+  esbuild: true
+  msgpackr-extract: true
+  prisma: true
+  unrs-resolver: true
+
 onlyBuiltDependencies:
   - "@prisma/client"
   - "@prisma/engines"
