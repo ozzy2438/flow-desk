@@ -42,7 +42,15 @@ export default async function JobDetailPage({
             </a>
           )}
         </div>
-        {job.evaluation && <DecisionBadge decision={job.evaluation.decision} />}
+        <div className="flex flex-col items-end gap-2">
+          {job.evaluation && <DecisionBadge decision={job.evaluation.decision} />}
+          <a
+            href={`/cover-letter/${job.id}`}
+            className="text-xs text-indigo-600 hover:underline"
+          >
+            Cover letter verification →
+          </a>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">

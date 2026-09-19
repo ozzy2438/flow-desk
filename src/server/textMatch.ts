@@ -1,15 +1,23 @@
 /**
  * Small deterministic keyword-overlap helpers shared by the demo decision
- * provider and the pre-Jev evidence-gap check. No fuzziness, no randomness:
- * same input always produces the same output.
+ * provider, the pre-Jev evidence-gap check, and cover-letter claim
+ * verification. No fuzziness, no randomness: same input always produces
+ * the same output.
  */
+const STOPWORDS = new Set([
+  "a", "an", "the", "and", "or", "of", "to", "in", "on", "with", "for", "by",
+  "at", "is", "are", "was", "were", "be", "been", "this", "that", "it", "as",
+  "from", "i", "we", "you", "your", "our", "will", "would", "have", "has",
+  "had", "not", "but", "so", "if", "into", "over", "under", "than",
+]);
+
 export function tokenize(text: string): Set<string> {
   return new Set(
     text
       .toLowerCase()
       .split(/[^a-z0-9+.#]+/)
       .map((t) => t.trim())
-      .filter((t) => t.length > 1),
+      .filter((t) => t.length > 1 && !STOPWORDS.has(t)),
   );
 }
 
