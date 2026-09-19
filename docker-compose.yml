@@ -7,7 +7,14 @@ services:
       POSTGRES_PASSWORD: flow_desk_dev
       POSTGRES_DB: flow_desk
     ports:
-      - "5432:5432"
+      # Host port 5433, not 5432: many dev machines already run a native
+      # Postgres on 5432 (Homebrew, a system service, another project).
+      # macOS in particular will silently route localhost:5432 to that
+      # existing listener instead of this container's, producing a
+      # confusing "role/user does not exist" error that looks like a
+      # credentials problem but is actually a port collision. Update
+      # DATABASE_URL's port to match if you change this.
+      - "5433:5432"
     volumes:
       - flow_desk_postgres:/var/lib/postgresql/data
 

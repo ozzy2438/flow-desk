@@ -11,7 +11,7 @@ const envSchema = z.object({
 
   DATABASE_URL: z
     .string()
-    .default("postgresql://flow_desk:flow_desk_dev@localhost:5432/flow_desk"),
+    .default("postgresql://flow_desk:flow_desk_dev@localhost:5433/flow_desk"),
   REDIS_URL: z.string().default("redis://localhost:6379"),
   SESSION_SECRET: z.string().default("dev-only-insecure-secret"),
 
