@@ -1,0 +1,29 @@
+node_modules/
+dist/
+.next/
+.out/
+.turbo/
+coverage/
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+
+# Playwright
+playwright-report/
+test-results/
+
+# Local screenshots and traces produced by the browser worker in dev
+screenshots/
+traces/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editors
+.idea/
+.vscode/
