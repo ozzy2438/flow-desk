@@ -75,7 +75,9 @@ async function extractDemoBoard(page: Page): Promise<ExtractedJobFields> {
 }
 
 const EXTRACTORS: Record<string, (page: Page) => Promise<ExtractedJobFields>> = {
-  DEMO_BOARD: extractDemoBoard,
+  DEMO_BOARD_ALL: extractDemoBoard,
+  DEMO_BOARD_REMOTE: extractDemoBoard,
+  DEMO_BOARD_CONTRACT: extractDemoBoard,
 };
 
 export function getExtractor(sourceId: string) {

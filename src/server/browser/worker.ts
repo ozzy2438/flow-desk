@@ -8,6 +8,7 @@ import { getExtractor } from "./extractors";
 import { rawJobInputSchema } from "../jobs/types";
 import { normalizeJobInput } from "../jobs/normalize";
 import { evaluateAndPersistJob } from "../jobs/evaluate";
+import { syncResearchRunStatus } from "../researchRuns/syncStatus";
 import type { FlowStatus } from "@prisma/client";
 
 class FlowCancelledError extends Error {}
@@ -125,6 +126,7 @@ export async function runFlow(flowId: string, userId: string): Promise<void> {
     await setStatus(flowId, "OPENING_BROWSER");
     await db.discoveryFlow.update({ where: { id: flowId }, data: { startedAt: new Date() } });
     await emitEvent(flowId, "OPENING_BROWSER", "Opening an isolated browser context");
+    await syncResearchRunStatus(flow.researchRunId);
 
     if (await isCancelled(flowId)) throw new FlowCancelledError();
 
@@ -246,5 +248,6 @@ export async function runFlow(flowId: string, userId: string): Promise<void> {
     }
   } finally {
     await context?.close();
+    await syncResearchRunStatus(flow.researchRunId);
   }
 }

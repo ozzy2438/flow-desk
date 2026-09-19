@@ -20,9 +20,11 @@ data/*.csv
 playwright-report/
 test-results/
 
-# Local screenshots and traces produced by the browser worker in dev
-screenshots/
-traces/
+# Local screenshots and traces produced by the browser worker in dev.
+# Anchored to the repo root: src/app/api/screenshots/ is application code,
+# not output, and must not match here.
+/screenshots/
+/traces/
 
 # Logs
 npm-debug.log*

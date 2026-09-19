@@ -26,16 +26,27 @@ function page(title: string, body: string): string {
 </html>`;
 }
 
-function renderListing(): string {
-  const cards = DEMO_JOBS.map(
-    (job) => `
+const ALL_FILTER = () => true;
+const LISTING_FILTERS: Record<string, (job: (typeof DEMO_JOBS)[number]) => boolean> = {
+  all: ALL_FILTER,
+  remote: (job) => job.workplaceType === "REMOTE",
+  contract: (job) => job.employmentType === "CONTRACT" || job.employmentType === "FIXED_TERM",
+};
+
+function renderListing(filter: string): string {
+  const predicate = LISTING_FILTERS[filter] ?? ALL_FILTER;
+  const jobs = DEMO_JOBS.filter(predicate);
+  const cards = jobs
+    .map(
+      (job) => `
     <div class="job-card" data-job-id="${job.id}">
       <div class="job-title"><a href="/jobs/${job.id}">${escapeHtml(job.title)}</a></div>
       <div class="job-company">${escapeHtml(job.company)}</div>
       <div class="job-location">${escapeHtml(job.location)}</div>
     </div>`,
-  ).join("\n");
-  return page("Flow Desk demo job board", `<h1>Open roles</h1>\n${cards}`);
+    )
+    .join("\n");
+  return page("Flow Desk demo job board", `<h1>Open roles (${escapeHtml(filter)})</h1>\n${cards}`);
 }
 
 function renderDetail(job: (typeof DEMO_JOBS)[number]): string {
@@ -81,7 +92,7 @@ export async function ensureFixtureServer(): Promise<string> {
 
     if (url.pathname === "/jobs" || url.pathname === "/jobs/") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(renderListing());
+      res.end(renderListing(url.searchParams.get("filter") ?? "all"));
       return;
     }
 
