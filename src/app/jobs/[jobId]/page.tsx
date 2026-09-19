@@ -144,6 +144,29 @@ export default async function JobDetailPage({
         <h2 className="text-sm font-medium text-slate-700">Description</h2>
         <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{job.descriptionRaw}</p>
       </div>
+
+      {job.decisionAudits.length > 0 && (
+        <div className="card p-5">
+          <h2 className="text-sm font-medium text-slate-700">Decision audit timeline</h2>
+          <ul className="mt-2 flex flex-col gap-3">
+            {job.decisionAudits.map((audit) => {
+              const output = audit.outputResult as Record<string, unknown>;
+              return (
+                <li key={audit.id} className="border-l-2 border-slate-200 pl-3 text-sm">
+                  <p className="text-xs text-slate-400">
+                    {audit.provider} · {audit.question} ·{" "}
+                    {new Date(audit.createdAt).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-slate-600">
+                    recommendation: {String(output.recommendation)} · confidence:{" "}
+                    {String(output.confidence)} · evidence: {String(output.evidenceRelevance)}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
