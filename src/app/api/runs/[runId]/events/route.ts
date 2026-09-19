@@ -14,7 +14,7 @@ async function loadRunSnapshot(runId: string) {
       flows: {
         orderBy: { createdAt: "asc" },
         include: {
-          screenshots: { orderBy: { createdAt: "desc" }, take: 1 },
+          screenshots: { orderBy: { createdAt: "asc" }, take: 20 },
           events: { orderBy: { createdAt: "desc" }, take: 5 },
         },
       },

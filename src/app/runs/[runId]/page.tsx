@@ -12,7 +12,7 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
       flows: {
         orderBy: { createdAt: "asc" },
         include: {
-          screenshots: { orderBy: { createdAt: "desc" }, take: 1 },
+          screenshots: { orderBy: { createdAt: "asc" }, take: 20 },
           events: { orderBy: { createdAt: "desc" }, take: 5 },
         },
       },

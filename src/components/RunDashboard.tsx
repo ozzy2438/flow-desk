@@ -16,7 +16,7 @@ type FlowSnapshot = {
   jobsSkipped: number;
   startedAt: string | null;
   finishedAt: string | null;
-  screenshots: Array<{ id: string; stepLabel: string }>;
+  screenshots: Array<{ id: string; stepLabel: string; createdAt: string }>;
   events: Array<{ id: string; kind: string; label: string; createdAt: string }>;
 };
 
@@ -48,9 +48,21 @@ function elapsed(startedAt: string | null, finishedAt: string | null): string {
   return `${seconds}s`;
 }
 
+const FAILURE_MESSAGES: Record<string, string> = {
+  LOGIN_REQUIRED: "This source requires a user session. The read-only flow stopped.",
+  CAPTCHA: "This source requested human verification. The flow stopped without trying to bypass it.",
+  RATE_LIMITED: "The source limited requests. The flow was paused and can be retried later.",
+  TIMEOUT: "The page did not reach a usable state within the allowed time.",
+  NETWORK: "A network error interrupted the flow.",
+  EXTRACTION_INCOMPLETE:
+    "The page opened but critical job fields were not visible. The job was routed to review if retained.",
+  POLICY_BLOCKED: "The source or action is not permitted by the current policy.",
+  UNKNOWN: "The flow stopped unexpectedly.",
+};
+
 function FlowCard({ flow, onStop }: { flow: FlowSnapshot; onStop: (flowId: string) => void }) {
   const [expanded, setExpanded] = useState(false);
-  const latestScreenshot = flow.screenshots[0];
+  const latestScreenshot = flow.screenshots[flow.screenshots.length - 1];
   const latestEvent = flow.events[0];
   const isTerminal = ["COMPLETE", "FAILED", "CANCELLED"].includes(flow.status);
 
@@ -87,7 +99,9 @@ function FlowCard({ flow, onStop }: { flow: FlowSnapshot; onStop: (flowId: strin
         </div>
 
         {flow.failureCategory && (
-          <p className="mt-2 text-xs text-red-600">Failure: {flow.failureCategory}</p>
+          <p className="mt-2 text-xs text-red-600">
+            {FAILURE_MESSAGES[flow.failureCategory] ?? FAILURE_MESSAGES.UNKNOWN}
+          </p>
         )}
 
         <div className="mt-3 flex items-center justify-between">
@@ -108,13 +122,29 @@ function FlowCard({ flow, onStop }: { flow: FlowSnapshot; onStop: (flowId: strin
         </div>
 
         {expanded && (
-          <ul className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2 text-xs text-slate-500">
-            {flow.events.map((event) => (
-              <li key={event.id}>
-                <span className="font-mono text-slate-400">{event.kind}</span> — {event.label}
-              </li>
-            ))}
-          </ul>
+          <div className="mt-2 border-t border-slate-100 pt-2">
+            {flow.screenshots.length > 1 && (
+              <div className="mb-2 flex gap-1 overflow-x-auto">
+                {flow.screenshots.map((shot, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={shot.id}
+                    src={`/api/screenshots/${shot.id}`}
+                    alt={shot.stepLabel}
+                    title={`${i + 1}. ${shot.stepLabel}`}
+                    className="h-14 w-20 flex-none rounded border border-slate-200 object-cover"
+                  />
+                ))}
+              </div>
+            )}
+            <ul className="flex flex-col gap-1 text-xs text-slate-500">
+              {flow.events.map((event) => (
+                <li key={event.id}>
+                  <span className="font-mono text-slate-400">{event.kind}</span> — {event.label}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
     </div>
