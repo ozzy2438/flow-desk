@@ -36,6 +36,7 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
 
   BROWSER_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(3),
+  BROWSER_PER_DOMAIN_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(2),
   BROWSER_MAX_PAGES_PER_FLOW: z.coerce.number().int().min(1).max(20).default(3),
   BROWSER_MAX_STEPS_PER_FLOW: z.coerce.number().int().min(1).max(100).default(20),
   BROWSER_MAX_DURATION_SECONDS: z.coerce.number().int().min(10).max(600).default(120),

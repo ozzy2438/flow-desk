@@ -2,9 +2,13 @@ import { existsSync } from "node:fs";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { db } from "../db";
 import { logger } from "../logger";
+import { getEnv } from "../env";
 import { captureObservation, isObservationFresh } from "./observation";
 import { storeScreenshot } from "./screenshotStorage";
 import { getExtractor } from "./extractors";
+import { assertDomainAllowed, DomainNotAllowedError } from "./domainGuard";
+import { detectUnsafePageState, UnsafePageStateError } from "./safetyChecks";
+import { acquireDomainSlot } from "./perDomainConcurrency";
 import { rawJobInputSchema } from "../jobs/types";
 import { normalizeJobInput } from "../jobs/normalize";
 import { evaluateAndPersistJob } from "../jobs/evaluate";
@@ -96,10 +100,26 @@ async function isCancelled(flowId: string): Promise<boolean> {
 }
 
 function categorizeFailure(error: unknown): string {
+  if (error instanceof DomainNotAllowedError) return "POLICY_BLOCKED";
+  if (error instanceof UnsafePageStateError) return error.category;
   const message = error instanceof Error ? error.message : String(error);
   if (/timeout/i.test(message)) return "TIMEOUT";
   if (/net::/i.test(message)) return "NETWORK";
   return "UNKNOWN";
+}
+
+/**
+ * Navigates, then re-checks safety on the URL the page actually settled on
+ * (post-redirect) rather than the one requested - a domain allowed at flow
+ * creation time is not the same guarantee as "every page this flow ever
+ * lands on." Throws instead of continuing on an off-allowlist domain, a
+ * rate-limit response, a login wall or a CAPTCHA.
+ */
+async function guardedGoto(page: Page, url: string, allowedDomains: string[]): Promise<void> {
+  const response = await page.goto(url, { waitUntil: "domcontentloaded" });
+  assertDomainAllowed(page.url(), allowedDomains);
+  const unsafe = await detectUnsafePageState(page, response);
+  if (unsafe) throw unsafe;
 }
 
 /**
@@ -121,8 +141,12 @@ export async function runFlow(flowId: string, userId: string): Promise<void> {
 
   const deadline = Date.now() + flow.maxDurationSeconds * 1000;
   let context: BrowserContext | undefined;
+  let releaseDomainSlot: (() => void) | undefined;
 
   try {
+    const startHostname = new URL(flow.startUrl).hostname;
+    releaseDomainSlot = await acquireDomainSlot(startHostname, getEnv().BROWSER_PER_DOMAIN_CONCURRENCY);
+
     await setStatus(flowId, "OPENING_BROWSER");
     await db.discoveryFlow.update({ where: { id: flowId }, data: { startedAt: new Date() } });
     await emitEvent(flowId, "OPENING_BROWSER", "Opening an isolated browser context");
@@ -135,7 +159,7 @@ export async function runFlow(flowId: string, userId: string): Promise<void> {
     const page = await context.newPage();
 
     await setStatus(flowId, "OPEN_PAGE");
-    await page.goto(flow.startUrl, { waitUntil: "domcontentloaded" });
+    await guardedGoto(page, flow.startUrl, flow.allowedDomains);
     let pageCount = 1;
     const openScreenshot = await captureScreenshot(page, flowId, "Open source");
     let observation = await recordObservation(flowId, page, openScreenshot.id);
@@ -175,7 +199,7 @@ export async function runFlow(flowId: string, userId: string): Promise<void> {
       if (await isCancelled(flowId)) throw new FlowCancelledError();
 
       await setStatus(flowId, "OPENING_JOB_DETAIL");
-      await page.goto(link, { waitUntil: "domcontentloaded" });
+      await guardedGoto(page, link, flow.allowedDomains);
       pageCount++;
       const detailScreenshot = await captureScreenshot(page, flowId, `Open job detail: ${link}`);
       observation = await recordObservation(flowId, page, detailScreenshot.id);
@@ -248,6 +272,7 @@ export async function runFlow(flowId: string, userId: string): Promise<void> {
     }
   } finally {
     await context?.close();
+    releaseDomainSlot?.();
     await syncResearchRunStatus(flow.researchRunId);
   }
 }

@@ -79,6 +79,45 @@ let server: http.Server | undefined;
 let baseUrl: string | undefined;
 
 /**
+ * Routes that exist only so tests/integration/browserWorker.test.ts can
+ * exercise the worker's safety checks (domain allowlist across a redirect,
+ * rate-limit/login-wall/CAPTCHA detection) against something real, without
+ * touching an actual third-party site. None of these are linked from the
+ * job board itself.
+ */
+function handleTestRoute(pathname: string, res: http.ServerResponse): boolean {
+  if (pathname === "/test/redirect-external") {
+    // Redirects to a different hostname on the same loopback machine, so
+    // the worker's post-navigation domain check (not just the requested
+    // URL) is what has to catch this.
+    const address = server?.address() as AddressInfo | null;
+    res.writeHead(302, { Location: `http://localhost:${address?.port}/jobs` });
+    res.end();
+    return true;
+  }
+
+  if (pathname === "/test/rate-limited") {
+    res.writeHead(429, { "Content-Type": "text/plain" });
+    res.end("Too Many Requests");
+    return true;
+  }
+
+  if (pathname === "/test/login-wall") {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(page("Sign in", `<h1>Sign in required</h1><form><input type="password" /></form>`));
+    return true;
+  }
+
+  if (pathname === "/test/captcha") {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(page("Verify", `<h1>Please verify you are human</h1>`));
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Starts (once per process) the local fixture job board that the Playwright
  * worker navigates in Milestone 6's proof of concept. Bound to loopback
  * only - this is test infrastructure for our own code, never a public
@@ -89,6 +128,8 @@ export async function ensureFixtureServer(): Promise<string> {
 
   server = http.createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
+
+    if (handleTestRoute(url.pathname, res)) return;
 
     if (url.pathname === "/jobs" || url.pathname === "/jobs/") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
