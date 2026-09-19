@@ -1,0 +1,13 @@
+{
+  "name": "flow-desk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Infrastructure blueprint for evidence-backed parallel job discovery flows.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "echo 'The implementation team replaces this seed manifest with the Next.js application scripts.'",
+    "test": "echo 'The implementation team adds the test suite.'"
+  }
+}
