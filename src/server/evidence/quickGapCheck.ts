@@ -18,6 +18,7 @@ export function hasEvidenceGap(requiredSkills: string[], records: ProfileRecord[
   const candidateTokens = new Set<string>();
   for (const record of records) {
     const data = record.data as Record<string, unknown>;
+    if (data.cv_usage === "excluded") continue;
     const skills = Array.isArray(data.skills) ? (data.skills as string[]) : [];
     const tools = Array.isArray(data.tools) ? (data.tools as string[]) : [];
     for (const skill of [...skills, ...tools]) {

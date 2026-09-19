@@ -12,9 +12,10 @@ Thumbs.db
 *.tsbuildinfo
 .data/
 
-# CSVs the operator drops into data/ — real personal data, never committed by
-# the blueprint or the app itself.
+# CSVs/JSON the operator drops into data/ — real personal data (name, email,
+# phone, work history), never committed by the blueprint or the app itself.
 data/*.csv
+data/*.json
 
 # Playwright
 playwright-report/

@@ -24,7 +24,14 @@ export async function matchEvidence(
   job: NormalizedJobData,
   records: ProfileRecord[],
 ) {
-  const evidenceRecords = records.filter((r) => r.evidenceId && EVIDENCE_KINDS.has(r.kind));
+  const evidenceRecords = records.filter((r) => {
+    if (!r.evidenceId || !EVIDENCE_KINDS.has(r.kind)) return false;
+    const data = r.data as Record<string, unknown>;
+    // cv_usage: "excluded" (Apply OS schema) means this record must never
+    // appear on a CV or be cited in application material - never match it,
+    // regardless of how well its skills overlap the posting.
+    return data.cv_usage !== "excluded";
+  });
   const allRequirements = [...job.requiredSkills, ...job.preferredSkills];
   const descriptionTokens = tokenize(job.descriptionRaw);
 
@@ -63,6 +70,18 @@ export async function matchEvidence(
     if (outcome && (category === "DIRECT" || category === "STRONG_ADJACENT")) {
       safeClaims.push(outcome);
     }
+    // Apply OS schema: allowed_claims are already vetted, claim-policy-
+    // compliant sentences for this exact project - prefer them outright
+    // over the auto-generated "supports skill X" sentences above.
+    const allowedClaims = Array.isArray(data.allowed_claims) ? (data.allowed_claims as string[]) : [];
+    if (allowedClaims.length > 0 && category !== "WEAK_ADJACENT") {
+      safeClaims.push(...allowedClaims);
+    }
+    // claim_boundaries: things this record must never be presented as, or
+    // qualifications that must travel with any claim from it. Surfaced as
+    // forbiddenClaims so the cover-letter view and claim verifier both see
+    // them, rather than only living in this project's own JSON.
+    const forbiddenClaims = Array.isArray(data.claim_boundaries) ? (data.claim_boundaries as string[]) : [];
 
     rows.push({
       jobId,
@@ -70,8 +89,8 @@ export async function matchEvidence(
       category,
       supportedRequirements,
       unsupportedRequirements,
-      safeClaims,
-      forbiddenClaims: [],
+      safeClaims: [...new Set(safeClaims)],
+      forbiddenClaims,
       confidence: Math.round(ratio * 100) / 100,
     });
   }

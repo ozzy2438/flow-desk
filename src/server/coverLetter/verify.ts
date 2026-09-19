@@ -24,8 +24,47 @@ function normalize(text: string): string {
  * against the underlying evidence record is a weaker, explicit fallback -
  * never enough on its own to unblock Ready status.
  */
-export function verifyClaim(claim: string, matches: MatchWithRecord[]): ClaimVerificationResult {
+const FORBIDDEN_OVERLAP_THRESHOLD = 0.55;
+
+/**
+ * A claim policy's forbidden_claims (claim_policy.json's "must never be
+ * asserted, in any wording, regardless of posting pressure") is a stronger
+ * rule than anything keyword overlap or a safe-claim match can override -
+ * checked before either, so a paraphrase of a forbidden claim can never
+ * slip through because it happens to also overlap a legitimate safe claim.
+ */
+function tokenOverlapRatio(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  const shared = [...a].filter((t) => b.has(t)).length;
+  return shared / Math.min(a.size, b.size);
+}
+
+function matchesForbiddenClaim(claim: string, forbiddenClaims: string[]): string | null {
+  const claimTokens = tokenize(claim);
+  for (const forbidden of forbiddenClaims) {
+    if (!forbidden) continue;
+    if (tokenOverlapRatio(claimTokens, tokenize(forbidden)) >= FORBIDDEN_OVERLAP_THRESHOLD) return forbidden;
+  }
+  return null;
+}
+
+export function verifyClaim(
+  claim: string,
+  matches: MatchWithRecord[],
+  forbiddenClaims: string[] = [],
+): ClaimVerificationResult {
   const claimNorm = normalize(claim);
+
+  const perMatchForbidden = matches.flatMap((m) => m.forbiddenClaims);
+  const forbiddenHit = matchesForbiddenClaim(claim, [...forbiddenClaims, ...perMatchForbidden]);
+  if (forbiddenHit) {
+    return {
+      claimText: claim,
+      status: "UNSUPPORTED",
+      evidenceId: null,
+      reason: `Matches a forbidden claim: "${forbiddenHit}". Never assert this regardless of wording.`,
+    };
+  }
 
   for (const match of matches) {
     const hit = match.safeClaims.find((safeClaim) => {
@@ -83,6 +122,10 @@ export function verifyClaim(claim: string, matches: MatchWithRecord[]): ClaimVer
   };
 }
 
-export function verifyClaims(claims: string[], matches: MatchWithRecord[]): ClaimVerificationResult[] {
-  return claims.map((claim) => verifyClaim(claim, matches));
+export function verifyClaims(
+  claims: string[],
+  matches: MatchWithRecord[],
+  forbiddenClaims: string[] = [],
+): ClaimVerificationResult[] {
+  return claims.map((claim) => verifyClaim(claim, matches, forbiddenClaims));
 }

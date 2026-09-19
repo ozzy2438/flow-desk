@@ -36,18 +36,35 @@ export async function generateAndVerifyCoverLetter(jobId: string) {
   const profileImport = await db.candidateProfileImport.findFirst({
     where: { records: { some: { evidenceMatches: { some: { jobId } } } } },
   });
-  const constraints = profileImport
-    ? (
-        await db.profileRecord.findMany({
-          where: { importId: profileImport.id, kind: { in: ["CONSTRAINT", "FACT"] } },
-        })
-      )
-        .map((r) => {
-          const data = r.data as Record<string, unknown>;
-          return typeof data.summary === "string" && data.summary ? data.summary : (r.title ?? "");
-        })
-        .filter(Boolean)
+  const factRecords = profileImport
+    ? await db.profileRecord.findMany({
+        where: { importId: profileImport.id, kind: { in: ["CONSTRAINT", "FACT"] } },
+      })
     : [];
+  const constraints = factRecords
+    .map((r) => {
+      const data = r.data as Record<string, unknown>;
+      return typeof data.summary === "string" && data.summary ? data.summary : (r.title ?? "");
+    })
+    .filter(Boolean);
+
+  // Apply OS schema: claim_policy.forbidden_claims, imported as a FACT
+  // record - "must never be asserted, in any wording" per claim_use_policy.
+  // Combined with any CLAIM_POLICY-category rules from the active decision
+  // policy (the CSV/simple-JSON path's equivalent).
+  const claimPolicyRecord = factRecords.find(
+    (r) => (r.data as Record<string, unknown>)?.recordType === "CLAIM_POLICY",
+  );
+  const profileForbiddenClaims =
+    ((claimPolicyRecord?.data as Record<string, unknown>)?.forbidden_claims as Array<{ claim?: string }>) ?? [];
+  const activePolicy = await db.decisionPolicyImport.findFirst({
+    where: { isActive: true },
+    include: { rules: { where: { category: "CLAIM_POLICY", active: true, action: "HARD_BLOCK" } } },
+  });
+  const forbiddenClaims = [
+    ...profileForbiddenClaims.map((c) => c.claim).filter((c): c is string => Boolean(c)),
+    ...(activePolicy?.rules.map((r) => r.reason).filter(Boolean) ?? []),
+  ];
 
   const flags = getFeatureFlags();
   const provider = flags.liveGenerationProvider
@@ -56,7 +73,7 @@ export async function generateAndVerifyCoverLetter(jobId: string) {
 
   const draftText = await provider.draft(job, job.evidenceMatches, constraints);
   const claims = extractClaims(draftText);
-  const verifications = verifyClaims(claims, job.evidenceMatches);
+  const verifications = verifyClaims(claims, job.evidenceMatches, forbiddenClaims);
 
   const hasUnsupported = verifications.some((v) => v.status === "UNSUPPORTED");
   const hasUncertain = verifications.some(

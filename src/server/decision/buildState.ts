@@ -22,7 +22,7 @@ export function buildJobEvaluationState(
     .filter(Boolean);
 
   const evidenceCandidates: CandidateEvidenceSummary[] = records
-    .filter((r) => r.evidenceId)
+    .filter((r) => r.evidenceId && (r.data as Record<string, unknown>)?.cv_usage !== "excluded")
     .map((r) => {
       const data = r.data as Record<string, unknown>;
       return {
