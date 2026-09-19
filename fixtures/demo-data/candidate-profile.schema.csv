@@ -1,0 +1,11 @@
+column_name,data_type,required,description
+kind,STRING,TRUE,PROJECT | SKILL | EXPERIENCE | EDUCATION | FACT | CONSTRAINT
+evidence_id,STRING,FALSE,Stable unique ID referenced by evidence matches
+title,STRING,TRUE,Short human-readable name for this evidence record
+summary,STRING,FALSE,One paragraph description of the evidence
+skills,LIST,FALSE,Pipe-separated skill tags this evidence supports
+tools,LIST,FALSE,Pipe-separated tools or technologies used
+outcome,STRING,FALSE,Measurable outcome or result if any
+employment_basis,STRING,FALSE,EMPLOYEE | CONTRACT | INDEPENDENT
+years_experience,NUMBER,FALSE,Years of experience this record represents
+url,STRING,FALSE,Public link to the evidence if one exists

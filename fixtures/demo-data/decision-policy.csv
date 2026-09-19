@@ -1,0 +1,14 @@
+rule_code,category,field,operator,value,action,reason,active
+ROLE_EXCL_NON_TARGET,ROLE_EXCLUSION,title,CONTAINS,Sales Representative|Business Development Manager|Recruiter|Account Executive,HARD_BLOCK,"Role exclusion: not targeting sales, business development or recruiting titles.",TRUE
+LOC_BLOCK_OUTSIDE_TARGET,LOCATION,location,NOT_CONTAINS,Melbourne|Remote|Australia,HARD_BLOCK,"Outside target locations (Melbourne, remote-Australia, or unspecified Australia).",TRUE
+WORK_RIGHTS_CLEARANCE,WORK_RIGHTS,visaRequirements,CONTAINS,Security clearance required|Must hold Australian citizenship,HARD_BLOCK,Requires a clearance or citizenship status not currently evidenced.,TRUE
+COMP_BELOW_FLOOR,COMPENSATION,salaryMax,LESS_THAN,90000,PENALTY,Below preferred compensation floor; salary data is often incomplete so this penalizes rather than blocks.,TRUE
+EMP_BASIS_PREFERRED,EMPLOYMENT_BASIS,employmentType,IN,CONTRACT|FIXED_TERM|FULL_TIME,BOOST,"Matches accepted employment bases (contract, fixed-term or full-time).",TRUE
+EMP_BASIS_LOWER_PREFERENCE,EMPLOYMENT_BASIS,employmentType,IN,CASUAL|PART_TIME,PENALTY,Employment basis is a lower preference.,TRUE
+SENIORITY_LEAD_REVIEW,SENIORITY,seniority,EQUALS,LEAD,REVIEW,Leadership-track seniority needs a manual fit check before routing.,TRUE
+SENIORITY_ENTRY_BLOCK,SENIORITY,seniority,EQUALS,ENTRY,HARD_BLOCK,Entry-level roles are below target seniority.,TRUE
+DUPLICATE_ROUTE_REVIEW,DUPLICATE,dedupeKey,ALWAYS,,REVIEW,A posting that duplicates an existing one is routed to review to confirm which record should stay canonical.,TRUE
+DEEP_REVIEW_RELOCATION,DEEP_REVIEW,descriptionRaw,CONTAINS,must relocate|visa sponsorship not available,REVIEW,Posting text flags a condition that needs a manual read before applying.,TRUE
+EVIDENCE_GAP_UNMATCHED_SKILL,EVIDENCE_GAP,requiredSkills,ALWAYS,,REVIEW,A required skill with no matching evidence record routes the job to review instead of silent rejection or fabricated confidence.,TRUE
+CLAIM_NO_FABRICATION,CLAIM_POLICY,claim_text,ALWAYS,,HARD_BLOCK,"Never fabricate achievements, clients, teams or quantified metrics that are not present in verified evidence.",TRUE
+CLAIM_KEEP_QUALIFIERS,CLAIM_POLICY,claim_text,ALWAYS,,REVIEW,"Qualified claims (for example ""contributed to"" or ""supported"") must keep their qualification in generated application text.",TRUE
