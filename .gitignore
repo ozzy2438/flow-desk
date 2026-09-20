@@ -27,6 +27,12 @@ test-results/
 /screenshots/
 /traces/
 
+# Local Product Design comparison captures.
+/reference-*.png
+/implementation-*.png
+/design-qa-comparison.png
+/public/qa/
+
 # Logs
 npm-debug.log*
 yarn-debug.log*

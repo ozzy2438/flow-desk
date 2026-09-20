@@ -4,12 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 const EXAMPLE_GOAL =
-  "Find Melbourne or remote Data Scientist, AI Engineer, Applied AI Engineer, Frontend Engineer and Automation Engineer roles from the last 7 days. Include contract, fixed-term and independent-delivery-compatible opportunities. Only show me postings that a strong application can be built for from my verified evidence library.";
+  "Find fresh Melbourne or remote Data Engineer and Applied AI roles I can support with verified evidence.";
 
 export function ResearchComposer() {
   const router = useRouter();
   const [goal, setGoal] = useState("");
   const [flowCount, setFlowCount] = useState(3);
+  const [deviceMode, setDeviceMode] = useState<"DESKTOP" | "MOBILE_WEB">("DESKTOP");
+  const [linkedIn, setLinkedIn] = useState(true);
+  const [seek, setSeek] = useState(true);
   const [sourceUrls, setSourceUrls] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +20,7 @@ export function ResearchComposer() {
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (goal.trim().length < 10) {
-      setError("Describe your goal in a bit more detail.");
+      setError("Describe the job search in a little more detail.");
       return;
     }
     setSubmitting(true);
@@ -29,6 +32,8 @@ export function ResearchComposer() {
         body: JSON.stringify({
           goal,
           requestedFlowCount: flowCount,
+          deviceMode,
+          sourceOptions: { linkedIn, seek },
           sourceUrls: sourceUrls
             .split(/\r?\n/)
             .map((value) => value.trim())
@@ -49,72 +54,119 @@ export function ResearchComposer() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card flex flex-col gap-4 p-5">
-      <div>
-        <label htmlFor="goal" className="text-sm font-medium text-slate-700">
-          Research goal
-        </label>
-        <textarea
-          id="goal"
-          value={goal}
-          onChange={(event) => setGoal(event.target.value)}
-          placeholder={EXAMPLE_GOAL}
-          rows={4}
-          className="mt-1 w-full rounded-md border border-slate-300 p-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-        />
+    <form onSubmit={handleSubmit} className="flow-composer">
+      <div className="mb-5 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            New browser research
+          </p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">
+            Grab fresh job flows from the web
+          </h2>
+        </div>
+        <span className="rounded-full bg-[#eefbe7] px-3 py-1 text-xs font-semibold text-[#32752a]">
+          JEV routing live
+        </span>
       </div>
 
-      <div>
-        <label htmlFor="sourceUrls" className="text-sm font-medium text-slate-700">
-          Live company boards <span className="font-normal text-slate-400">(optional)</span>
+      <label htmlFor="goal" className="sr-only">
+        Research goal
+      </label>
+      <textarea
+        id="goal"
+        value={goal}
+        onChange={(event) => setGoal(event.target.value)}
+        placeholder={EXAMPLE_GOAL}
+        rows={3}
+        className="w-full resize-none border-0 bg-transparent text-lg leading-7 text-slate-950 outline-none placeholder:text-slate-400 focus:ring-0"
+      />
+
+      <div className="mt-5 flex flex-col gap-4 border-t border-slate-200 pt-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-3">
+            <label htmlFor="flowCount" className="text-xs font-semibold text-slate-600">
+              Flows {flowCount}
+            </label>
+            <input
+              id="flowCount"
+              type="range"
+              min={1}
+              max={10}
+              value={flowCount}
+              onChange={(event) => setFlowCount(Number(event.target.value))}
+              className="w-28 accent-slate-950"
+            />
+          </div>
+
+          <div className="segmented-control" aria-label="Browser viewport">
+            <button
+              type="button"
+              onClick={() => setDeviceMode("DESKTOP")}
+              aria-pressed={deviceMode === "DESKTOP"}
+              className={deviceMode === "DESKTOP" ? "is-active" : ""}
+            >
+              Desktop
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeviceMode("MOBILE_WEB")}
+              aria-pressed={deviceMode === "MOBILE_WEB"}
+              className={deviceMode === "MOBILE_WEB" ? "is-active" : ""}
+            >
+              Mobile web
+            </button>
+          </div>
+
+          <label className="source-toggle">
+            <input
+              type="checkbox"
+              checked={linkedIn}
+              onChange={(event) => setLinkedIn(event.target.checked)}
+            />
+            LinkedIn handoff
+          </label>
+          <label className="source-toggle">
+            <input
+              type="checkbox"
+              checked={seek}
+              onChange={(event) => setSeek(event.target.checked)}
+            />
+            SEEK handoff
+          </label>
+        </div>
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="rounded-full bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-50"
+        >
+          {submitting ? "Opening flows…" : "Start research"}
+        </button>
+      </div>
+
+      <details className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+        <summary className="cursor-pointer text-sm font-medium text-slate-700">
+          Add public Greenhouse or Lever company boards
+        </summary>
+        <label htmlFor="sourceUrls" className="sr-only">
+          Public company board URLs
         </label>
         <textarea
           id="sourceUrls"
           value={sourceUrls}
           onChange={(event) => setSourceUrls(event.target.value)}
-          placeholder={"One public Greenhouse or Lever company board URL per line\nhttps://job-boards.greenhouse.io/company\nhttps://jobs.lever.co/company"}
+          placeholder={"One board URL per line\nhttps://job-boards.greenhouse.io/company\nhttps://jobs.lever.co/company"}
           rows={3}
-          className="mt-1 w-full rounded-md border border-slate-300 p-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="mt-3 w-full rounded-xl border border-slate-200 bg-white p-3 text-sm outline-none focus:border-slate-500"
         />
-        <p className="mt-1 text-xs text-slate-400">
-          If supplied, the run uses only these official public ATS sources. LinkedIn and SEEK jobs
-          are captured from the signed-in browser through Job Inbox, never scraped unattended.
+        <p className="mt-2 text-xs leading-5 text-slate-500">
+          Public ATS pages can run unattended. LinkedIn and SEEK stop at the signed-in-session
+          boundary and ask you to capture the visible job; Flow Desk never copies cookies or bypasses
+          anti-bot checks.
         </p>
-      </div>
+      </details>
 
-      <div className="flex items-center gap-3">
-        <label htmlFor="flowCount" className="text-sm font-medium text-slate-700">
-          Flow count
-        </label>
-        <input
-          id="flowCount"
-          type="range"
-          min={1}
-          max={10}
-          value={flowCount}
-          onChange={(event) => setFlowCount(Number(event.target.value))}
-          className="w-48"
-        />
-        <span className="w-6 text-sm text-slate-600">{flowCount}</span>
-        <span className="text-xs text-slate-400">
-          Default 3, max 10 · only a safe number run concurrently
-        </span>
-      </div>
-
-      {error && <p className="text-sm text-red-600">{error}</p>}
-
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-400">
-          Read-only discovery only. Nothing is ever submitted or messaged on your behalf.
-        </p>
-        <button
-          type="submit"
-          disabled={submitting}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-        >
-          {submitting ? "Planning flows…" : "Plan discovery flows"}
-        </button>
-      </div>
+      {error && <p className="mt-3 text-sm font-medium text-red-700">{error}</p>}
     </form>
   );
 }

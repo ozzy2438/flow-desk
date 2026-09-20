@@ -2,7 +2,7 @@ import { ensureFixtureServer } from "./fixtureServer";
 import { READ_ONLY_ALLOWED_ACTIONS } from "./actions";
 
 export type SourceDefinition = {
-  kind?: "BROWSER" | "PUBLIC_ATS";
+  kind?: "BROWSER" | "PUBLIC_ATS" | "MANUAL_HANDOFF";
   id: string;
   label: string;
   /** Resolves the approved start URL. Async because the fixture source boots a local server. */
@@ -51,6 +51,29 @@ export const SOURCE_REGISTRY: SourceDefinition[] = [
   },
 ];
 
+export const MANUAL_SOURCE_REGISTRY: SourceDefinition[] = [
+  {
+    kind: "MANUAL_HANDOFF",
+    id: "LINKEDIN_MANUAL",
+    label: "LinkedIn · attended capture",
+    resolveStartUrl: async () => "https://www.linkedin.com/jobs/search/",
+    allowedDomains: ["www.linkedin.com"],
+    defaultGoal:
+      "Show the LinkedIn source boundary and hand the signed-in browser step to the operator without copying cookies or bypassing controls.",
+    defaultStopCondition: "Stop at the signed-in-session boundary and request attended capture.",
+  },
+  {
+    kind: "MANUAL_HANDOFF",
+    id: "SEEK_MANUAL",
+    label: "SEEK · attended capture",
+    resolveStartUrl: async () => "https://www.seek.com.au/",
+    allowedDomains: ["www.seek.com.au"],
+    defaultGoal:
+      "Show the SEEK source boundary and hand the signed-in browser step to the operator without bypassing login, CAPTCHA, or anti-bot controls.",
+    defaultStopCondition: "Stop at the signed-in-session boundary and request attended capture.",
+  },
+];
+
 export function getSourceDefinition(id: string): SourceDefinition | undefined {
   return SOURCE_REGISTRY.find((s) => s.id === id);
 }
@@ -61,4 +84,6 @@ export const ALLOWED_DOMAINS = [
   "boards-api.greenhouse.io",
   "api.lever.co",
   "api.eu.lever.co",
+  "www.linkedin.com",
+  "www.seek.com.au",
 ];

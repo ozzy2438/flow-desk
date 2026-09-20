@@ -7,6 +7,13 @@ import { JobSourceFetchError } from "../jobs/urlImport";
 import { logger } from "../logger";
 import { syncResearchRunStatus } from "../researchRuns/syncStatus";
 import { applyDiscoveryEligibility, discoverPublicAtsJobs } from "./publicAts";
+import type { RawJobInput } from "../jobs/types";
+import {
+  DemoBrowserDecisionProvider,
+  type BrowserActionCandidate,
+  type BrowserDecisionProvider,
+} from "../browser/decisionProvider";
+import type { CapturedObservation } from "../browser/observation";
 
 class PublicAtsFlowCancelledError extends Error {}
 
@@ -14,6 +21,10 @@ export async function runPublicAtsFlow(
   flow: DiscoveryFlow,
   userId: string,
   fetchImpl: typeof fetch = fetch,
+  visual?: {
+    provider: BrowserDecisionProvider;
+    openJob: (job: RawJobInput, actionLabel: string) => Promise<void>;
+  },
 ): Promise<void> {
   const deadline = Date.now() + flow.maxDurationSeconds * 1000;
 
@@ -45,19 +56,33 @@ export async function runPublicAtsFlow(
       `Found ${jobs.length} matching jobs in the source's currently published public feed`,
     );
 
+    const eligibleJobs: RawJobInput[] = [];
     for (const discovered of jobs) {
+      const eligibility = applyDiscoveryEligibility(discovered, flow.goal);
+      if (!eligibility.eligible) {
+        await emit(flow.id, "SOURCE_FILTERED", `Filtered "${discovered.title}": ${eligibility.reason}`);
+      } else {
+        eligibleJobs.push(eligibility.job);
+      }
+    }
+    const remaining = [...eligibleJobs];
+
+    while (remaining.length > 0) {
       if (await isCancelled(flow.id)) throw new PublicAtsFlowCancelledError();
       if (Date.now() > deadline) {
         await emit(flow.id, "STOP", "Duration budget reached");
         break;
       }
 
-      const eligibility = applyDiscoveryEligibility(discovered, flow.goal);
-      if (!eligibility.eligible) {
-        await emit(flow.id, "SOURCE_FILTERED", `Filtered "${discovered.title}": ${eligibility.reason}`);
-        continue;
+      const raw = visual
+        ? await chooseNextVisualJob(flow, remaining, visual.provider)
+        : remaining[0];
+      if (!raw) break;
+      remaining.splice(remaining.indexOf(raw), 1);
+
+      if (visual) {
+        await visual.openJob(raw, `Open ${raw.title}`);
       }
-      const raw = eligibility.job;
 
       await db.discoveryFlow.update({
         where: { id: flow.id },
@@ -140,6 +165,85 @@ export async function runPublicAtsFlow(
   } finally {
     await syncResearchRunStatus(flow.researchRunId);
   }
+}
+
+async function chooseNextVisualJob(
+  flow: DiscoveryFlow,
+  remaining: RawJobInput[],
+  provider: BrowserDecisionProvider,
+): Promise<RawJobInput | undefined> {
+  const candidates: BrowserActionCandidate[] = remaining.slice(0, 20).map((job, index) => ({
+    id: `open-public-job-${index}`,
+    kind: "OPEN_JOB_DETAIL",
+    label: job.title,
+    description: `Open ${job.title} at ${job.company ?? "the listed company"} · ${job.location ?? "location unknown"}`,
+    value: job.sourceExternalId ?? job.sourceUrl ?? String(index),
+  }));
+  candidates.push({
+    id: "stop-public-source",
+    kind: "STOP",
+    label: "Stop this public source",
+    description: "Choose only if none of the remaining published jobs advances the research goal.",
+  });
+  const observation: CapturedObservation = {
+    observationVersion: `public-${flow.id}-${remaining.length}`,
+    url: flow.startUrl,
+    title: flow.title,
+    visibleTextSummary: remaining
+      .map((job) => `${job.title} · ${job.company ?? ""} · ${job.location ?? ""}`)
+      .join("\n")
+      .slice(0, 2000),
+    elements: candidates
+      .filter((candidate) => candidate.kind === "OPEN_JOB_DETAIL")
+      .map((candidate) => ({
+        id: candidate.id,
+        role: "link" as const,
+        name: candidate.label,
+        value: candidate.value ?? null,
+        visible: true,
+        enabled: true,
+        supportedActions: ["OPEN_JOB_DETAIL" as const],
+        risk: "NONE" as const,
+      })),
+  };
+
+  let decision;
+  try {
+    decision = await provider.chooseAction({
+      goal: flow.goal,
+      observation,
+      candidates,
+      recentActions: [],
+    });
+  } catch (error) {
+    await emit(flow.id, "JEV_FALLBACK", "Jev was unavailable; used the safe public-feed order", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    decision = await new DemoBrowserDecisionProvider().chooseAction({
+      goal: flow.goal,
+      observation,
+      candidates,
+      recentActions: [],
+    });
+  }
+  const chosen = candidates.find((candidate) => candidate.id === decision.actionId);
+  if (!chosen || chosen.kind === "STOP") {
+    await emit(flow.id, "BROWSER_DECISION", `${decision.provider} stopped this public source`, {
+      provider: decision.provider,
+      confidence: decision.confidence,
+      actionId: decision.actionId,
+    });
+    return undefined;
+  }
+  await emit(flow.id, "BROWSER_DECISION", `${decision.provider} chose: ${chosen.label}`, {
+    provider: decision.provider,
+    confidence: decision.confidence,
+    actionId: chosen.id,
+    actionKind: chosen.kind,
+    observationVersion: decision.observationVersion,
+  });
+  const chosenIndex = Number(chosen.id.replace("open-public-job-", ""));
+  return remaining[chosenIndex];
 }
 
 async function emit(

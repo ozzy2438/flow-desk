@@ -1,6 +1,6 @@
 # flow-desk
 
-Evidence-backed job discovery workspace. Runs several web-flow research tasks in parallel, isolated Playwright browser contexts, evaluates each result with typed decisions against a canonical candidate profile and a decision policy, and produces a human-approved shortlist. Never applies on your behalf.
+Evidence-backed, browser-first job discovery workspace. Runs several visual research flows in parallel, lets Jev choose among code-owned read-only browser actions and distinct screenshots, evaluates verified jobs against a canonical candidate profile and decision policy, and produces a human-approved shortlist. Never applies on your behalf.
 
 This repository started as an infrastructure blueprint (`ARCHITECTURE.md`, `AGENCY_BRIEF.md`, `STACK.md`, `SETUP.md`, `docs/`) and is now a working implementation of it, milestone by milestone through `SETUP.md`. The design docs are still the source of truth for *why* things are built the way they are; this file covers running what's here.
 
@@ -10,7 +10,7 @@ You type a research goal into a chat box, for example:
 
 > Find Melbourne or remote Data Scientist, AI Engineer, Applied AI Engineer, Frontend Engineer and Automation Engineer roles from the last 7 days. Include contract, fixed-term and independent-delivery-compatible opportunities. Only show me postings that a strong application can be built for from my verified evidence library.
 
-The planner turns the request into up to 10 structured discovery flows against an allowlisted source registry. Each flow runs in an isolated Playwright browser context. Screenshots and step events stream back to the UI over SSE as live cards, so you see all flows working in parallel. Each discovered job is normalized, filtered by a deterministic policy engine, evaluated by a typed decision provider, matched against your evidence library, and routed into apply / review / skip. Daily Desk shows only the strong apply candidates and the postings that need a human look.
+The planner turns the request into up to 10 structured discovery flows against an allowlisted source registry. Each automatic flow runs in an isolated Playwright browser context. Jev chooses the next action only from the safe candidates supplied by code and separately decides which page states add a distinct screenshot to the flow story. Screenshots and step events stream back to the UI over SSE as source galleries, so you see the flows working in parallel. Each discovered job is then normalized, filtered by a deterministic policy engine, evaluated by a separate typed job-decision provider, matched against your evidence library, and routed into apply / review / skip.
 
 ## Quickstart
 
@@ -41,10 +41,10 @@ Run the test suite with `pnpm test` (policy engine, CSV/JSON import, public ATS 
 
 Flow Desk now has two explicit live-source paths:
 
-1. **Greenhouse and Lever company boards** — paste one public company-board URL per line into
-   **Live company boards** on the Research Run form. Each source becomes its own queued flow and
-   uses the ATS vendor's official, unauthenticated read API. Public feeds are checked at run time;
-   published-date and deadline evidence is stored separately from the employer's description.
+1. **Greenhouse and Lever company boards** — expand **Add public Greenhouse or Lever company
+   boards** on the Research form and paste one public company-board URL per line. Each source uses
+   the vendor's official unauthenticated read API for source facts, while a bounded browser session
+   opens approved public detail pages and produces the visual flow.
 2. **LinkedIn, SEEK and other session-bound sources** — open the job in your normal signed-in
    browser, then use **Job Inbox → Paste a LinkedIn, SEEK or other job** with the source URL and
    full visible description. Flow Desk does not copy browser cookies, automate login, bypass
@@ -67,9 +67,9 @@ currently open: a last-N-days goal with no verifiable published date is routed t
 
 Short answer: **no key is required to run this end to end.** Every external provider is behind a feature flag (`src/server/flags.ts`) that falls back to a safe local implementation:
 
-- **Decision provider** (role/skills/seniority fit, routing recommendation): a deterministic keyword-overlap heuristic (`src/server/decision/demoProvider.ts`) by default; set `JEV_API_KEY` to switch to the live Jev/TypeSafe provider. Both return the exact same validated shape.
+- **Jev providers**: the browser provider chooses code-owned actions and distinct screens; the job provider scores role/skills/seniority fit and routing. Demo mode uses deterministic implementations for both. Set `APP_MODE=live` and `JEV_API_KEY` to activate the live TypeSafe endpoint.
 - **Cover-letter drafting**: a template generator that can only ever emit the job title/company and safe claims evidence matching already produced by default; set `OPENAI_API_KEY` to switch to live drafting. Every draft - from either provider - goes through the same claim-verification pipeline before it can reach Ready status.
-- **Browser worker and public ATS flows**: demo mode still uses isolated Playwright contexts against the bundled local board. A Research Run can additionally use operator-supplied Greenhouse or Lever company-board URLs through those vendors' official public GET APIs. LinkedIn, SEEK and other session-bound sources remain manual browser captures; Flow Desk never automates their login, CAPTCHA or Apply surfaces.
+- **Browser worker and public ATS flows**: demo mode uses isolated Playwright contexts against the bundled local board. Operator-supplied Greenhouse or Lever boards combine official public GET data with visual capture of approved hosted job pages. LinkedIn and SEEK appear as explicit attended-handoff cards; Flow Desk never automates their login, CAPTCHA or Apply surfaces.
 - **Exa / Tavily / Apify**: not wired up. `docs/data-apis.md` covers when you'd want them for broader discovery. They are not required for the built-in Greenhouse/Lever public ATS path.
 
 ## Non-negotiable safety rules

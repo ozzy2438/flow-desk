@@ -38,4 +38,11 @@ export const planRequestSchema = z.object({
   goal: z.string().min(10).max(2000),
   requestedFlowCount: z.number().int().min(1).max(10),
   sourceUrls: z.array(z.string().url()).max(10).default([]),
+  deviceMode: z.enum(["DESKTOP", "MOBILE_WEB"]).default("DESKTOP"),
+  sourceOptions: z
+    .object({
+      linkedIn: z.boolean().default(true),
+      seek: z.boolean().default(true),
+    })
+    .default({ linkedIn: true, seek: true }),
 });

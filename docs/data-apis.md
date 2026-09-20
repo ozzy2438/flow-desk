@@ -2,7 +2,7 @@
 
 ## Direct answer
 
-Jev is a decision API, not a browser, crawler, search engine or screenshot service. A parallel browser-flow product needs additional infrastructure.
+Jev is the fast decision layer that drives Flow Desk's bounded browser loop; Playwright is the browser runtime. Code constructs permitted actions and page observations, Jev chooses among them and judges screenshot novelty, and Playwright executes the selected read-only action. Jev does not crawl or render pages by itself.
 
 ## Required baseline
 
@@ -21,15 +21,17 @@ careers pages:
 - Greenhouse: `GET https://boards-api.greenhouse.io/v1/boards/{board_token}/jobs`
 - Lever: `GET https://api.lever.co/v0/postings/{site}` (or the EU host)
 
-The operator supplies company-board URLs on each Research Run; Flow Desk normalizes them to the
-fixed vendor API hosts, filters by explicit role/location terms, fetches details sequentially per
-domain, stores source-verification facts and evaluates the results through the same policy/evidence
-pipeline. A public-feed result proves that the job was published when fetched. It does not prove a
-recent posting date unless the source exposes one.
+The operator supplies company-board URLs on each Research Run; Flow Desk normalizes them to fixed
+vendor API hosts, filters by explicit role/location terms and fetches details sequentially per
+domain. Jev then chooses which remaining verified job to open next, Playwright captures the public
+hosted job page, and Jev keeps only distinct screens. Source-verification facts still come from the
+official read API, not from visual inference. A public-feed result proves that the job was published
+when fetched. It does not prove a recent posting date unless the source exposes one.
 
 LinkedIn and SEEK are deliberately not treated as equivalent read APIs. Their partner APIs are for
 approved recruitment-software integrations and do not provide a general candidate-side search API.
-Use signed-in browser capture + full-JD paste for those sources; never reuse cookies in the worker.
+Their Research Run cards end in a visible attended-handoff state. Use the normal signed-in browser
+and full-JD capture for those sources; never reuse cookies in the worker.
 
 ### Exa or Tavily
 

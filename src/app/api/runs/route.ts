@@ -17,15 +17,21 @@ export async function POST(request: Request) {
   }
 
   const user = await getCurrentUser();
-  const { goal, requestedFlowCount, sourceUrls } = parsed.data;
+  const { goal, requestedFlowCount, sourceUrls, deviceMode, sourceOptions } = parsed.data;
 
   const run = await db.researchRun.create({
-    data: { userId: user.id, userGoal: goal, requestedFlowCount, status: "PLANNING" },
+    data: {
+      userId: user.id,
+      userGoal: goal,
+      requestedFlowCount,
+      mode: `READ_ONLY:${deviceMode}`,
+      status: "PLANNING",
+    },
   });
 
   let candidates;
   try {
-    candidates = await planDiscoveryFlows(goal, requestedFlowCount, sourceUrls);
+    candidates = await planDiscoveryFlows(goal, requestedFlowCount, sourceUrls, sourceOptions);
   } catch (error) {
     await db.researchRun.update({ where: { id: run.id }, data: { status: "FAILED" } });
     if (error instanceof UnsupportedJobUrlError) {

@@ -10,13 +10,20 @@ import { assertDomainAllowed, DomainNotAllowedError } from "./domainGuard";
 import { detectUnsafePageState, UnsafePageStateError } from "./safetyChecks";
 import { acquireDomainSlot } from "./perDomainConcurrency";
 import { deriveSearchTerm } from "./deriveSearchTerm";
-import { rawJobInputSchema } from "../jobs/types";
+import { rawJobInputSchema, type RawJobInput } from "../jobs/types";
 import { normalizeJobInput } from "../jobs/normalize";
 import { evaluateAndPersistJob } from "../jobs/evaluate";
 import { syncResearchRunStatus } from "../researchRuns/syncStatus";
-import type { FlowStatus } from "@prisma/client";
+import type { DiscoveryFlow, FlowStatus } from "@prisma/client";
 import { isPublicAtsBoardApiUrl } from "../jobSources/publicAts";
 import { runPublicAtsFlow } from "../jobSources/runPublicAtsFlow";
+import {
+  DemoBrowserDecisionProvider,
+  getBrowserDecisionProvider,
+  type BrowserActionCandidate,
+  type BrowserDecisionProvider,
+  type ScreenshotHistoryItem,
+} from "./decisionProvider";
 
 class FlowCancelledError extends Error {}
 
@@ -78,7 +85,7 @@ async function captureScreenshot(page: Page, flowId: string, stepLabel: string) 
   return artifact;
 }
 
-async function recordObservation(flowId: string, page: Page, screenshotId: string) {
+async function recordObservation(flowId: string, page: Page, screenshotId?: string) {
   const observation = await captureObservation(page);
   await db.browserObservation.create({
     data: {
@@ -92,6 +99,123 @@ async function recordObservation(flowId: string, page: Page, screenshotId: strin
     },
   });
   return observation;
+}
+
+async function observeStep(input: {
+  page: Page;
+  flowId: string;
+  goal: string;
+  stepLabel: string;
+  provider: BrowserDecisionProvider;
+  screenshotHistory: ScreenshotHistoryItem[];
+  forceScreenshot?: boolean;
+}) {
+  const observation = await captureObservation(input.page);
+  const screenshotDecision = input.forceScreenshot
+    ? { distinct: true, probability: 1, confidence: 1, provider: "CODE" as const }
+    : await judgeScreenshotSafely(input.provider, {
+        goal: input.goal,
+        observation,
+        stepLabel: input.stepLabel,
+        history: input.screenshotHistory,
+      });
+  let screenshotId: string | undefined;
+
+  if (screenshotDecision.distinct) {
+    const screenshot = await captureScreenshot(input.page, input.flowId, input.stepLabel);
+    screenshotId = screenshot.id;
+    input.screenshotHistory.push({ ...observation, stepLabel: input.stepLabel });
+    await emitEvent(input.flowId, "SCREENSHOT_KEPT", `Kept distinct screen: ${input.stepLabel}`, {
+      screenshotId,
+      provider: screenshotDecision.provider,
+      probability: screenshotDecision.probability,
+      confidence: screenshotDecision.confidence,
+    });
+  } else {
+    await emitEvent(input.flowId, "SCREENSHOT_SKIPPED", `Skipped repeated screen: ${input.stepLabel}`, {
+      provider: screenshotDecision.provider,
+      probability: screenshotDecision.probability,
+      confidence: screenshotDecision.confidence,
+    });
+  }
+
+  await db.browserObservation.create({
+    data: {
+      flowId: input.flowId,
+      observationVersion: observation.observationVersion,
+      url: observation.url,
+      title: observation.title,
+      visibleTextSummary: observation.visibleTextSummary,
+      elements: observation.elements,
+      screenshotArtifactId: screenshotId,
+    },
+  });
+  return { observation, screenshotId };
+}
+
+async function chooseActionSafely(input: {
+  flowId: string;
+  goal: string;
+  page: Page;
+  observation: Awaited<ReturnType<typeof captureObservation>>;
+  candidates: BrowserActionCandidate[];
+  provider: BrowserDecisionProvider;
+  recentActions: string[];
+}) {
+  let provider: BrowserDecisionProvider = input.provider;
+  let decision;
+  try {
+    decision = await provider.chooseAction({
+      goal: input.goal,
+      observation: input.observation,
+      candidates: input.candidates,
+      recentActions: input.recentActions,
+    });
+  } catch (error) {
+    await emitEvent(input.flowId, "JEV_FALLBACK", "Jev was unavailable; used the safe deterministic route", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    provider = new DemoBrowserDecisionProvider();
+    decision = await provider.chooseAction({
+      goal: input.goal,
+      observation: input.observation,
+      candidates: input.candidates,
+      recentActions: input.recentActions,
+    });
+  }
+
+  const current = await captureObservation(input.page);
+  if (!isObservationFresh(decision.observationVersion, current)) {
+    await emitEvent(input.flowId, "STALE_DECISION", "Discarded a browser choice after the page changed", {
+      provider: decision.provider,
+      decidedFrom: decision.observationVersion,
+      current: current.observationVersion,
+    });
+    throw new Error("The page changed before the selected browser action could be executed.");
+  }
+
+  const candidate = input.candidates.find((item) => item.id === decision.actionId);
+  if (!candidate) throw new Error("The selected browser action is no longer available.");
+  input.recentActions.push(`${candidate.kind}: ${candidate.label}`);
+  await emitEvent(input.flowId, "BROWSER_DECISION", `${decision.provider} chose: ${candidate.label}`, {
+    provider: decision.provider,
+    confidence: decision.confidence,
+    actionId: candidate.id,
+    actionKind: candidate.kind,
+    observationVersion: decision.observationVersion,
+  });
+  return { candidate, decision };
+}
+
+async function judgeScreenshotSafely(
+  provider: BrowserDecisionProvider,
+  input: Parameters<BrowserDecisionProvider["judgeScreenshot"]>[0],
+) {
+  try {
+    return await provider.judgeScreenshot(input);
+  } catch {
+    return new DemoBrowserDecisionProvider().judgeScreenshot(input);
+  }
 }
 
 async function isCancelled(flowId: string): Promise<boolean> {
@@ -145,14 +269,32 @@ async function guardedGoto(page: Page, url: string, allowedDomains: string[]): P
  * check is real, not decorative).
  */
 export async function runFlow(flowId: string, userId: string): Promise<void> {
-  const flow = await db.discoveryFlow.findUnique({ where: { id: flowId } });
+  const flow = await db.discoveryFlow.findUnique({
+    where: { id: flowId },
+    include: { researchRun: { select: { mode: true } } },
+  });
   if (!flow) {
     logger.error("runFlow: flow not found", { flowId });
     return;
   }
 
+  if (flow.source === "LINKEDIN_MANUAL" || flow.source === "SEEK_MANUAL") {
+    await runManualHandoffFlow(flow);
+    return;
+  }
+
+  const provider = getBrowserDecisionProvider();
+
   if (isPublicAtsBoardApiUrl(flow.startUrl)) {
-    await runPublicAtsFlow(flow, userId);
+    const visualSession = createPublicAtsVisualSession(flow, provider);
+    try {
+      await runPublicAtsFlow(flow, userId, fetch, {
+        provider,
+        openJob: visualSession.openJob,
+      });
+    } finally {
+      await visualSession.close();
+    }
     return;
   }
 
@@ -172,44 +314,132 @@ export async function runFlow(flowId: string, userId: string): Promise<void> {
     if (await isCancelled(flowId)) throw new FlowCancelledError();
 
     const browser = await getSharedBrowser();
-    context = await browser.newContext({ viewport: { width: 1440, height: 960 } });
+    const mobile = flow.researchRun.mode === "READ_ONLY:MOBILE_WEB";
+    context = await browser.newContext({
+      viewport: mobile ? { width: 430, height: 932 } : { width: 1440, height: 960 },
+      isMobile: mobile,
+    });
     const page = await context.newPage();
 
     await setStatus(flowId, "OPEN_PAGE");
     await guardedGoto(page, flow.startUrl, flow.allowedDomains);
     let pageCount = 1;
     await page.waitForTimeout(STEP_PACE_MS); // paced for the live dashboard, not correctness
-    const openScreenshot = await captureScreenshot(page, flowId, "Open source");
-    let observation = await recordObservation(flowId, page, openScreenshot.id);
+    const screenshotHistory: ScreenshotHistoryItem[] = [];
+    const recentActions: string[] = [];
+    const openStep = await observeStep({
+      page,
+      flowId,
+      goal: flow.goal,
+      stepLabel: "Open source",
+      provider,
+      screenshotHistory,
+      forceScreenshot: true,
+    });
+    let observation = openStep.observation;
+    const openScreenshotId = openStep.screenshotId;
     await emitEvent(flowId, "OPEN_PAGE", `Opened ${observation.url}`, {
-      screenshotId: openScreenshot.id,
+      screenshotId: openScreenshotId,
+      browserDecisionProvider: provider.name,
     });
 
     const searchTerm = deriveSearchTerm(flow.goal);
-    if (searchTerm && (await page.locator("#search-input").count()) > 0) {
+    const searchInput = observation.elements.find(
+      (element) => element.role === "textbox" && element.visible && element.enabled,
+    );
+    if (searchTerm && searchInput) {
       await setStatus(flowId, "SEARCHING");
-      await emitEvent(flowId, "SEARCHING", `Typing "${searchTerm}" into the search box`);
-      await page.locator("#search-input").fill(searchTerm);
-      await page.waitForTimeout(STEP_PACE_MS);
-      const typedScreenshot = await captureScreenshot(page, flowId, `Search term entered: "${searchTerm}"`);
-      await emitEvent(flowId, "SEARCHING", `Entered search term "${searchTerm}"`, {
-        screenshotId: typedScreenshot.id,
+      const { candidate: searchChoice } = await chooseActionSafely({
+        flowId,
+        goal: flow.goal,
+        page,
+        observation,
+        provider,
+        recentActions,
+        candidates: [
+          {
+            id: "type-search-goal",
+            kind: "TYPE_TEXT",
+            label: `Search for “${searchTerm}”`,
+            description: "Use the visible job-board search field to narrow results to the user's role goal.",
+            elementId: searchInput.id,
+            value: searchTerm,
+          },
+          {
+            id: "continue-unfiltered",
+            kind: "WAIT",
+            label: "Continue with the current listing",
+            description: "Use only when the current listing is already focused enough for the goal.",
+          },
+        ],
       });
 
-      const [searchResponse] = await Promise.all([
-        page.waitForNavigation({ waitUntil: "domcontentloaded" }),
-        page.locator("#search-button").click(),
-      ]);
-      assertDomainAllowed(page.url(), flow.allowedDomains);
-      const unsafeAfterSearch = await detectUnsafePageState(page, searchResponse);
-      if (unsafeAfterSearch) throw unsafeAfterSearch;
-      pageCount++;
-      await page.waitForTimeout(STEP_PACE_MS);
-      const resultsScreenshot = await captureScreenshot(page, flowId, `Search results for "${searchTerm}"`);
-      observation = await recordObservation(flowId, page, resultsScreenshot.id);
-      await emitEvent(flowId, "SEARCHING", `Search results updated for "${searchTerm}"`, {
-        screenshotId: resultsScreenshot.id,
-      });
+      if (searchChoice.kind === "TYPE_TEXT" && searchChoice.elementId) {
+        await emitEvent(flowId, "SEARCHING", `Typing "${searchTerm}" into the selected search field`);
+        await page.locator(`[data-flowdesk-id="${searchChoice.elementId}"]`).fill(searchTerm);
+        await page.waitForTimeout(STEP_PACE_MS);
+        ({ observation } = await observeStep({
+          page,
+          flowId,
+          goal: flow.goal,
+          stepLabel: `Search term entered: "${searchTerm}"`,
+          provider,
+          screenshotHistory,
+        }));
+
+        const searchButton = observation.elements.find(
+          (element) =>
+            element.role === "button" && /search/i.test(element.name) && element.visible && element.enabled,
+        );
+        if (searchButton) {
+          const { candidate: submitChoice } = await chooseActionSafely({
+            flowId,
+            goal: flow.goal,
+            page,
+            observation,
+            provider,
+            recentActions,
+            candidates: [
+              {
+                id: "submit-search",
+                kind: "CLICK",
+                label: "Run the job-board search",
+                description: "Submit the visible read-only search filter and inspect the result list.",
+                elementId: searchButton.id,
+              },
+              {
+                id: "keep-current-results",
+                kind: "WAIT",
+                label: "Keep the current results",
+                description: "Use only if submitting would not improve the current state.",
+              },
+            ],
+          });
+          if (submitChoice.kind === "CLICK" && submitChoice.elementId) {
+            const [searchResponse] = await Promise.all([
+              page.waitForNavigation({ waitUntil: "domcontentloaded" }),
+              page.locator(`[data-flowdesk-id="${submitChoice.elementId}"]`).click(),
+            ]);
+            assertDomainAllowed(page.url(), flow.allowedDomains);
+            const unsafeAfterSearch = await detectUnsafePageState(page, searchResponse);
+            if (unsafeAfterSearch) throw unsafeAfterSearch;
+            pageCount++;
+            await page.waitForTimeout(STEP_PACE_MS);
+            const searchResultStep = await observeStep({
+              page,
+              flowId,
+              goal: flow.goal,
+              stepLabel: `Search results for "${searchTerm}"`,
+              provider,
+              screenshotHistory,
+            });
+            observation = searchResultStep.observation;
+            await emitEvent(flowId, "SEARCHING", `Search results updated for "${searchTerm}"`, {
+              screenshotId: searchResultStep.screenshotId,
+            });
+          }
+        }
+      }
     }
 
     await setStatus(flowId, "SEARCHING");
@@ -226,8 +456,10 @@ export async function runFlow(flowId: string, userId: string): Promise<void> {
 
     const extractor = getExtractor(flow.source);
     let stepCount = 1;
+    const remainingLinks = [...jobLinks];
+    const listingUrl = page.url();
 
-    for (const link of jobLinks) {
+    while (remainingLinks.length > 0) {
       stepCount++;
       if (stepCount > flow.maxSteps) {
         await emitEvent(flowId, "STOP", "Step budget reached");
@@ -243,29 +475,96 @@ export async function runFlow(flowId: string, userId: string): Promise<void> {
       }
       if (await isCancelled(flowId)) throw new FlowCancelledError();
 
+      const candidates: BrowserActionCandidate[] = remainingLinks.slice(0, 20).map((link, index) => {
+        const matchingElement = observation.elements.find(
+          (element) => element.role === "link" && element.value && new URL(element.value, observation.url).toString() === link,
+        );
+        return {
+          id: `open-job-${index}`,
+          kind: "OPEN_JOB_DETAIL",
+          label: matchingElement?.name || `Open job ${index + 1}`,
+          description: `Open this remaining public job detail page: ${matchingElement?.name || link}`,
+          value: link,
+        };
+      });
+      candidates.push({
+        id: "stop-listing",
+        kind: "STOP",
+        label: "Stop this source",
+        description: "Choose only when none of the remaining visible jobs can advance the research goal.",
+      });
+      const { candidate: jobChoice } = await chooseActionSafely({
+        flowId,
+        goal: flow.goal,
+        page,
+        observation,
+        candidates,
+        provider,
+        recentActions,
+      });
+      if (jobChoice.kind === "STOP" || !jobChoice.value) {
+        await emitEvent(flowId, "STOP", `${provider.name} found no useful remaining detail page`);
+        break;
+      }
+      const link = jobChoice.value;
+      remainingLinks.splice(remainingLinks.indexOf(link), 1);
+
       await setStatus(flowId, "OPENING_JOB_DETAIL");
       await guardedGoto(page, link, flow.allowedDomains);
       pageCount++;
       await page.waitForTimeout(STEP_PACE_MS);
-      const detailScreenshot = await captureScreenshot(page, flowId, `Open job detail: ${link}`);
-      observation = await recordObservation(flowId, page, detailScreenshot.id);
-      if (!isObservationFresh(observation.observationVersion, observation)) {
-        // Always true immediately after capture; kept as an explicit guard
-        // so a future model-routed action must re-check before acting.
-        continue;
-      }
+      const detailResult = await observeStep({
+        page,
+        flowId,
+        goal: flow.goal,
+        stepLabel: `Open job detail: ${jobChoice.label}`,
+        provider,
+        screenshotHistory,
+      });
+      observation = detailResult.observation;
       await emitEvent(flowId, "OPENING_JOB_DETAIL", `Opened ${observation.title}`, {
-        screenshotId: detailScreenshot.id,
+        screenshotId: detailResult.screenshotId,
       });
 
       await setStatus(flowId, "EXTRACTING");
-      await page.mouse.wheel(0, 300);
-      await page.waitForTimeout(STEP_PACE_MS);
+      const { candidate: detailChoice } = await chooseActionSafely({
+        flowId,
+        goal: flow.goal,
+        page,
+        observation,
+        provider,
+        recentActions,
+        candidates: [
+          {
+            id: "scroll-detail",
+            kind: "SCROLL",
+            label: "Reveal more of the job detail",
+            description: "Scroll the public detail page to inspect requirements not yet visible.",
+          },
+          {
+            id: "extract-visible-detail",
+            kind: "EXTRACT_JOB",
+            label: "Extract the visible job detail now",
+            description: "Use when the visible page already contains enough information for bounded extraction.",
+          },
+        ],
+      });
+      if (detailChoice.kind === "SCROLL") {
+        await page.mouse.wheel(0, 520);
+        await page.waitForTimeout(STEP_PACE_MS);
+        ({ observation } = await observeStep({
+          page,
+          flowId,
+          goal: flow.goal,
+          stepLabel: `Requirements for ${observation.title}`,
+          provider,
+          screenshotHistory,
+        }));
+      }
       const extracted = await extractor(page);
       const candidate = await db.extractedJobCandidate.create({
         data: { flowId, rawPayload: extracted, confidence: extracted.extractionConfidence },
       });
-      await captureScreenshot(page, flowId, "Extract visible details");
       await emitEvent(flowId, "EXTRACT_JOB", `Extracted "${extracted.title}"`, {
         candidateId: candidate.id,
       });
@@ -292,6 +591,12 @@ export async function runFlow(flowId: string, userId: string): Promise<void> {
           ...(job.evaluation?.decision === "SKIP" && { jobsSkipped: { increment: 1 } }),
         },
       });
+
+      if (remainingLinks.length > 0 && pageCount < flow.maxPages) {
+        await guardedGoto(page, listingUrl, flow.allowedDomains);
+        await page.waitForTimeout(STEP_PACE_MS);
+        observation = await recordObservation(flowId, page);
+      }
     }
 
     await emitEvent(flowId, "STOP", "Listing exhausted");
@@ -323,4 +628,140 @@ export async function runFlow(flowId: string, userId: string): Promise<void> {
     releaseDomainSlot?.();
     await syncResearchRunStatus(flow.researchRunId);
   }
+}
+
+async function runManualHandoffFlow(flow: DiscoveryFlow): Promise<void> {
+  const sourceName = flow.source === "LINKEDIN_MANUAL" ? "LinkedIn" : "SEEK";
+  await db.discoveryFlow.update({
+    where: { id: flow.id },
+    data: { status: "OPENING_BROWSER", startedAt: new Date() },
+  });
+  await emitEvent(
+    flow.id,
+    "OPENING_BROWSER",
+    `${sourceName} needs the operator's signed-in browser session`,
+  );
+  await emitEvent(
+    flow.id,
+    "HUMAN_HANDOFF",
+    `Open ${sourceName}, inspect the visible posting, then capture it through Job Inbox`,
+    {
+      source: sourceName,
+      sourceUrl: flow.startUrl,
+      destination: "/inbox",
+      reason: "LOGIN_OR_ANTI_BOT_BOUNDARY",
+    },
+  );
+  await db.discoveryFlow.update({
+    where: { id: flow.id },
+    data: {
+      status: "FAILED",
+      failureCategory: "LOGIN_REQUIRED",
+      finishedAt: new Date(),
+    },
+  });
+  await syncResearchRunStatus(flow.researchRunId);
+}
+
+function createPublicAtsVisualSession(
+  flow: DiscoveryFlow & { researchRun: { mode: string } },
+  provider: BrowserDecisionProvider,
+) {
+  let context: BrowserContext | undefined;
+  let page: Page | undefined;
+  const screenshotHistory: ScreenshotHistoryItem[] = [];
+  const recentActions: string[] = [];
+  const approvedVisualHosts = new Set([
+    "boards.greenhouse.io",
+    "job-boards.greenhouse.io",
+    "jobs.lever.co",
+    "jobs.eu.lever.co",
+  ]);
+
+  return {
+    openJob: async (job: RawJobInput, actionLabel: string) => {
+      if (!job.sourceUrl) {
+        await emitEvent(flow.id, "SCREENSHOT_SKIPPED", `No public page URL for ${job.title}`);
+        return;
+      }
+      const target = new URL(job.sourceUrl);
+      if (target.protocol !== "https:" || !approvedVisualHosts.has(target.hostname)) {
+        await emitEvent(
+          flow.id,
+          "SCREENSHOT_SKIPPED",
+          `Skipped visual capture outside approved public ATS hosts: ${target.hostname}`,
+          { sourceUrl: job.sourceUrl },
+        );
+        return;
+      }
+
+      if (!context) {
+        const browser = await getSharedBrowser();
+        const mobile = flow.researchRun.mode === "READ_ONLY:MOBILE_WEB";
+        context = await browser.newContext({
+          viewport: mobile ? { width: 430, height: 932 } : { width: 1440, height: 960 },
+          isMobile: mobile,
+        });
+        page = await context.newPage();
+        await emitEvent(flow.id, "OPENING_BROWSER", "Opened an isolated public ATS browser context", {
+          browserDecisionProvider: provider.name,
+        });
+      }
+
+      await setStatus(flow.id, "OPENING_JOB_DETAIL");
+      await guardedGoto(page!, job.sourceUrl, [target.hostname]);
+      await page!.waitForTimeout(STEP_PACE_MS);
+      let result = await observeStep({
+        page: page!,
+        flowId: flow.id,
+        goal: flow.goal,
+        stepLabel: actionLabel,
+        provider,
+        screenshotHistory,
+        forceScreenshot: screenshotHistory.length === 0,
+      });
+      await emitEvent(flow.id, "OPENING_JOB_DETAIL", `Opened public page for ${job.title}`, {
+        screenshotId: result.screenshotId,
+        sourceUrl: job.sourceUrl,
+      });
+
+      const { candidate } = await chooseActionSafely({
+        flowId: flow.id,
+        goal: flow.goal,
+        page: page!,
+        observation: result.observation,
+        provider,
+        recentActions,
+        candidates: [
+          {
+            id: "scroll-public-detail",
+            kind: "SCROLL",
+            label: `Inspect requirements for ${job.title}`,
+            description: "Reveal more of the public job description before extraction and evaluation.",
+          },
+          {
+            id: "keep-public-detail",
+            kind: "WAIT",
+            label: `Keep the current ${job.title} view`,
+            description: "Use when the current public job view already represents the useful flow step.",
+          },
+        ],
+      });
+      if (candidate.kind === "SCROLL") {
+        await page!.mouse.wheel(0, 620);
+        await page!.waitForTimeout(STEP_PACE_MS);
+        result = await observeStep({
+          page: page!,
+          flowId: flow.id,
+          goal: flow.goal,
+          stepLabel: `Requirements for ${job.title}`,
+          provider,
+          screenshotHistory,
+        });
+      }
+    },
+    close: async () => {
+      await context?.close();
+    },
+  };
 }

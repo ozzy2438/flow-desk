@@ -1,4 +1,8 @@
-import { SOURCE_REGISTRY, ALL_ALLOWED_ACTIONS } from "../browser/sourceRegistry";
+import {
+  SOURCE_REGISTRY,
+  MANUAL_SOURCE_REGISTRY,
+  ALL_ALLOWED_ACTIONS,
+} from "../browser/sourceRegistry";
 import { getEnv } from "../env";
 import { discoveryFlowCandidateSchema, type DiscoveryFlowCandidate } from "./schema";
 import { parsePublicAtsBoardUrl } from "../jobSources/publicAts";
@@ -16,12 +20,22 @@ export async function planDiscoveryFlows(
   goal: string,
   requestedFlowCount: number,
   sourceUrls: string[] = [],
+  sourceOptions: { linkedIn?: boolean; seek?: boolean } = {},
 ): Promise<DiscoveryFlowCandidate[]> {
   const env = getEnv();
   const lowerGoal = goal.toLowerCase();
 
   const configuredSources = sourceUrls.map(parsePublicAtsBoardUrl);
-  const availableSources = configuredSources.length > 0 ? configuredSources : SOURCE_REGISTRY;
+  const manualSources = MANUAL_SOURCE_REGISTRY.filter(
+    (source) =>
+      (source.id === "LINKEDIN_MANUAL" && sourceOptions.linkedIn !== false) ||
+      (source.id === "SEEK_MANUAL" && sourceOptions.seek !== false),
+  );
+  const fallbackSources = env.APP_MODE === "live" ? [...manualSources, ...SOURCE_REGISTRY] : SOURCE_REGISTRY;
+  const availableSources =
+    configuredSources.length > 0
+      ? [...configuredSources, ...manualSources]
+      : fallbackSources;
   const ranked = [...availableSources].sort(
     (a, b) => relevance(b.id, lowerGoal) - relevance(a.id, lowerGoal),
   );
@@ -49,6 +63,9 @@ export async function planDiscoveryFlows(
 }
 
 function relevance(sourceId: string, lowerGoal: string): number {
+  if (sourceId === "LINKEDIN_MANUAL" && /linkedin/.test(lowerGoal)) return 4;
+  if (sourceId === "SEEK_MANUAL" && /seek/.test(lowerGoal)) return 4;
+  if (sourceId === "LINKEDIN_MANUAL" || sourceId === "SEEK_MANUAL") return 1;
   if (sourceId === "DEMO_BOARD_REMOTE" && /remote/.test(lowerGoal)) return 2;
   if (
     sourceId === "DEMO_BOARD_CONTRACT" &&

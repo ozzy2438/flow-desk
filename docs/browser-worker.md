@@ -31,9 +31,11 @@ Receive queue job
   → open approved start URL
   → capture observation and screenshot
   → build code-owned action space
-  → request only allowed decision routing
+  → ask Jev to choose one supplied action ID
+  → reject stale or out-of-set decisions
   → execute compatible action
   → verify postcondition
+  → ask Jev whether the new screen is distinct
   → repeat until stop condition or budget
   → persist artifacts
   → close context
@@ -52,6 +54,8 @@ The worker records:
 - screenshot ID
 - observation version
 - recent actions
+
+Visible text fields and selects may be observed, but password and hidden fields are excluded. Each visible control receives a local `data-flowdesk-id`; the ID is useful only for the exact observation version that produced it.
 
 The worker should exclude hidden fields, password fields, payment fields, cookies, auth headers, tokens and unrelated personal data.
 
@@ -99,7 +103,7 @@ If a postcondition fails, do not retry blindly. Re-observe, stop or route to fai
 
 ## Screenshots and traces
 
-Store screenshots in object storage. Keep metadata in PostgreSQL. Enable Playwright trace capture only under a debug policy, because traces can retain sensitive page state.
+The first automatic screen is always kept. Later screens are stored only when the screenshot-decision provider marks their structured page state as distinct. Store screenshots in object storage and metadata in PostgreSQL. Enable Playwright trace capture only under a debug policy, because traces can retain sensitive page state.
 
 ## Cancellation
 
