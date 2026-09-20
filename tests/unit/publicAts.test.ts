@@ -72,6 +72,53 @@ describe("public ATS Research Run sources", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("uses Lever country metadata to exclude non-Melbourne jobs before detail fetches", async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith("/v0/postings/acme")) {
+        return response([
+          {
+            id: "fr-job",
+            text: "Data Engineer",
+            categories: { allLocations: [] },
+            country: "FR",
+            workplaceType: "hybrid",
+          },
+          {
+            id: "au-job",
+            text: "Data Engineer",
+            categories: { location: "Melbourne", allLocations: ["Melbourne"] },
+            country: "AU",
+            workplaceType: "hybrid",
+          },
+        ]);
+      }
+      if (url.endsWith("/v0/postings/acme/au-job")) {
+        return response({
+          id: "au-job",
+          text: "Data Engineer",
+          categories: { location: "Melbourne", allLocations: ["Melbourne"] },
+          country: "AU",
+          descriptionPlain: "Build data platforms.",
+          hostedUrl: "https://jobs.lever.co/acme/au-job",
+          workplaceType: "hybrid",
+        });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    const jobs = await discoverPublicAtsJobs(
+      "https://api.lever.co/v0/postings/acme",
+      "Find Data Engineer roles in Melbourne",
+      10,
+      fetchMock as typeof fetch,
+    );
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({ sourceExternalId: "au-job", location: "Melbourne" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects LinkedIn and SEEK as unattended board sources", () => {
     for (const url of ["https://www.linkedin.com/jobs/search", "https://www.seek.com.au/jobs"]) {
       try {
@@ -116,5 +163,23 @@ describe("public ATS Research Run sources", () => {
     );
     expect(stale.eligible).toBe(false);
     expect(stale.reason).toContain("older than");
+
+    const outsideTarget = applyDiscoveryEligibility(
+      { ...base, location: undefined, country: "FR", workplaceType: "HYBRID" },
+      "Find Melbourne roles",
+      now,
+    );
+    expect(outsideTarget.eligible).toBe(false);
+    expect(outsideTarget.reason).toContain("does not match");
+
+    const unknownLocation = applyDiscoveryEligibility(
+      { ...base, location: undefined, workplaceType: "HYBRID" },
+      "Find Melbourne roles",
+      now,
+    );
+    expect(unknownLocation.eligible).toBe(true);
+    expect(unknownLocation.job.eligibilityUncertainties).toContain(
+      "The research goal has a location constraint, but this source does not expose a verifiable job location.",
+    );
   });
 });

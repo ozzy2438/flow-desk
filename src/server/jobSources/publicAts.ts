@@ -31,6 +31,8 @@ const leverListSchema = z.array(
         allLocations: z.array(z.string()).optional(),
       })
       .default({}),
+    country: z.string().nullable().optional(),
+    workplaceType: z.string().optional(),
   }),
 );
 
@@ -150,7 +152,12 @@ export async function discoverPublicAtsJobs(
     const site = parts[2];
     if (!site) throw new JobSourceFetchError("Invalid Lever board API URL.");
     for (const job of parsed) {
-      const locations = [job.categories.location, ...(job.categories.allLocations ?? [])]
+      const locations = [
+        job.categories.location,
+        ...(job.categories.allLocations ?? []),
+        job.country,
+        job.workplaceType,
+      ]
         .filter(Boolean)
         .join(" · ");
       if (matchesGoal(job.text, terms)) {
@@ -201,10 +208,27 @@ export function applyDiscoveryEligibility(
     }
   }
 
-  if (requestsSpecificLocation(goal) && !hasKnownLocation(job)) {
-    uncertainties.push(
-      "The research goal has a location constraint, but this source does not expose a verifiable job location.",
-    );
+  if (requestsSpecificLocation(goal)) {
+    const locationEvidence = [
+      job.location,
+      job.country,
+      job.workplaceType === "REMOTE" ? "remote" : undefined,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const locationMatch = matchRequestedLocation(locationEvidence, goal);
+    if (locationMatch === "MISMATCH") {
+      return {
+        eligible: false,
+        job,
+        reason: "The source's verified location does not match the research goal.",
+      };
+    }
+    if (locationMatch === "UNKNOWN") {
+      uncertainties.push(
+        "The research goal has a location constraint, but this source does not expose a verifiable job location.",
+      );
+    }
   }
 
   return {
@@ -239,10 +263,6 @@ function matchRequestedLocation(
 
 function requestsSpecificLocation(goal: string): boolean {
   return /melbourne|\bremote\b|uzaktan/i.test(goal);
-}
-
-function hasKnownLocation(job: RawJobInput): boolean {
-  return Boolean(job.location?.trim()) || job.workplaceType !== "UNKNOWN";
 }
 
 function requestedMaxAgeDays(goal: string): number | null {
