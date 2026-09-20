@@ -16,7 +16,7 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().default("dev-only-insecure-secret"),
 
   JEV_API_KEY: z.string().optional(),
-  JEV_API_URL: z.string().url().default("https://api.jev.dev"),
+  JEV_API_URL: z.string().url().default("https://api.typesafe.ai"),
 
   OPENAI_API_KEY: z.string().optional(),
 

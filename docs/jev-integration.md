@@ -32,6 +32,12 @@ Use independent questions such as:
 - Evidence relevance: DIRECT, STRONG_ADJACENT, WEAK_ADJACENT, NOT_RELEVANT.
 - Claim support: SUPPORTED, PARTIALLY_SUPPORTED, UNSUPPORTED, AMBIGUOUS.
 
+The live adapter sends these as a question map to TypeSafe's official
+`POST https://api.typesafe.ai/v1/systemone` endpoint with model
+`jev-latest`. Score answers are mapped from the API's rubric indexes to Flow
+Desk's bounded `0, 25, 50, 75, 100` contract. Choice and Noul answers are
+validated before the policy engine can consume them.
+
 ## Final decision
 
 Jev cannot directly set the final state. The policy engine combines hard filters, Jev signals, confidence and evidence readiness.
