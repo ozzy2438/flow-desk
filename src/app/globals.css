@@ -1,0 +1,356 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --canvas: #fbfbfa;
+  --ink: #181818;
+  --muted: #737373;
+  --line: #e6e6e4;
+  --soft: #f6f6f4;
+}
+
+body {
+  @apply antialiased;
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+
+.badge-apply {
+  @apply badge bg-green-100 text-green-800;
+}
+
+.badge-review {
+  @apply badge bg-amber-100 text-amber-800;
+}
+
+.badge-skip {
+  @apply badge bg-slate-200 text-slate-600;
+}
+
+.card {
+  @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+}
+
+.research-home {
+  @apply flex min-h-screen items-start justify-center px-5 pb-20 pt-[18vh] sm:pt-[22vh];
+}
+
+.research-home h1 {
+  @apply mb-6 text-center text-2xl font-semibold tracking-[-0.035em] text-neutral-900;
+}
+
+.research-composer,
+.run-prompt {
+  @apply w-full rounded-[22px] border border-neutral-200 bg-white p-3.5 shadow-[0_10px_28px_rgba(0,0,0,0.06)];
+}
+
+.research-input {
+  @apply block min-h-[58px] w-full resize-none border-0 bg-transparent px-1 text-[16px] leading-7 text-neutral-900 outline-none placeholder:text-neutral-400 focus:ring-0;
+}
+
+.research-controls,
+.run-prompt-controls {
+  @apply flex flex-wrap items-center gap-3 pt-2;
+}
+
+.flow-control {
+  @apply flex items-center gap-2 text-[11px] text-neutral-500;
+}
+
+.flow-control span,
+.flow-control strong {
+  @apply font-medium text-neutral-700;
+}
+
+.flow-control input {
+  @apply h-1 w-24 cursor-pointer accent-neutral-900;
+}
+
+.flow-control.is-locked input {
+  @apply cursor-default opacity-50;
+}
+
+.device-toggle {
+  @apply flex items-center rounded-full bg-neutral-100 p-1;
+}
+
+.device-toggle button,
+.device-toggle span {
+  @apply rounded-full px-3 py-1.5 text-[11px] font-medium text-neutral-400 transition;
+}
+
+.device-toggle .is-active {
+  @apply bg-white text-neutral-900 shadow-sm;
+}
+
+.research-submit {
+  @apply ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-neutral-950 text-white transition hover:bg-neutral-700 disabled:cursor-wait disabled:opacity-60;
+}
+
+.research-error {
+  @apply mt-3 border-t border-neutral-100 px-1 pt-3 text-xs text-red-600;
+}
+
+.run-page {
+  @apply min-h-screen bg-white px-4 pb-24 pt-6 sm:px-8;
+}
+
+.run-shell {
+  @apply mx-auto max-w-[1320px];
+}
+
+.new-research-link {
+  @apply mb-6 inline-flex items-center gap-2 text-xs font-medium text-neutral-500 hover:text-neutral-950;
+}
+
+.run-prompt {
+  @apply mx-auto max-w-[900px] p-5;
+}
+
+.run-prompt > p {
+  @apply min-h-12 text-[16px] leading-7 text-neutral-800;
+}
+
+.run-prompt-controls {
+  @apply border-t border-neutral-100 pt-3;
+}
+
+.run-phase {
+  @apply ml-auto flex items-center gap-2 text-xs font-medium text-neutral-600;
+}
+
+.run-phase button {
+  @apply ml-1 flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 hover:bg-neutral-100 hover:text-neutral-950;
+}
+
+.plan-section {
+  @apply mx-auto max-w-[900px] pb-14 pt-10;
+}
+
+.plan-section > h1 {
+  @apply text-xl font-semibold tracking-[-0.025em] text-neutral-900 sm:text-2xl;
+}
+
+.plan-summary {
+  @apply mt-2 max-w-3xl text-sm leading-6 text-neutral-500;
+}
+
+.plan-list {
+  @apply mt-6 space-y-2;
+}
+
+.compact-plan {
+  @apply mx-auto my-8 max-w-[900px] border-y border-neutral-100 py-4;
+}
+
+.compact-plan summary {
+  @apply flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-neutral-800;
+}
+
+.compact-plan summary::-webkit-details-marker {
+  display: none;
+}
+
+.compact-plan summary small {
+  @apply flex-none text-[11px] font-medium text-neutral-400;
+}
+
+.compact-plan .plan-list {
+  @apply mt-4;
+}
+
+.plan-row {
+  @apply grid grid-cols-[28px_minmax(0,1fr)] gap-3 rounded-2xl bg-neutral-50 px-4 py-4 sm:grid-cols-[28px_minmax(0,1fr)_auto] sm:items-start;
+}
+
+.plan-number {
+  @apply flex h-6 w-6 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-neutral-500 shadow-sm;
+}
+
+.plan-row h2 {
+  @apply truncate text-sm font-semibold text-neutral-900;
+}
+
+.plan-domain {
+  @apply mt-0.5 text-[11px] text-neutral-400;
+}
+
+.plan-copy {
+  @apply mt-2 line-clamp-2 max-w-3xl text-xs leading-5 text-neutral-600;
+}
+
+.plan-row > .status-pill {
+  @apply col-start-2 mt-2 justify-self-start sm:col-start-3 sm:row-start-1 sm:mt-0;
+}
+
+.status-pill {
+  @apply inline-flex flex-none items-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] font-medium text-neutral-600 shadow-sm;
+}
+
+.status-dot {
+  @apply h-1.5 w-1.5 rounded-full bg-neutral-300;
+}
+
+.status-dot.is-active {
+  @apply bg-neutral-800;
+}
+
+.live-section {
+  @apply border-t border-neutral-100;
+}
+
+.live-flow {
+  @apply border-b border-neutral-100 py-9;
+}
+
+.live-flow-header {
+  @apply mb-5 flex items-start justify-between gap-6;
+}
+
+.live-flow-header h2 {
+  @apply truncate text-sm font-semibold text-neutral-900;
+}
+
+.live-flow-header p {
+  @apply mt-1 text-[11px] text-neutral-400;
+}
+
+.live-screen-rail {
+  @apply flex gap-5 overflow-x-auto pb-4;
+  scrollbar-color: #d4d4d4 transparent;
+  scrollbar-width: thin;
+}
+
+.live-screen {
+  @apply w-[310px] flex-none text-left sm:w-[370px];
+}
+
+.live-screen-image {
+  @apply relative aspect-[16/10] overflow-hidden rounded-xl border border-neutral-200 bg-neutral-100 shadow-[0_8px_20px_rgba(0,0,0,0.06)];
+}
+
+.live-screen-image img {
+  @apply h-full w-full object-cover object-top;
+}
+
+.live-screen > p {
+  @apply mt-2 flex gap-2 text-xs font-medium text-neutral-700;
+}
+
+.live-screen > p span {
+  @apply text-neutral-400;
+}
+
+.live-label {
+  @apply absolute left-3 top-3 rounded-full bg-red-500 px-2 py-1 text-[10px] font-semibold text-white shadow-sm;
+}
+
+.live-screen.is-loading .live-screen-image {
+  @apply animate-pulse border-neutral-100 bg-neutral-50;
+}
+
+.live-screen.is-loading p {
+  @apply text-neutral-300;
+}
+
+.flow-details {
+  @apply mt-3 text-xs text-neutral-500;
+}
+
+.flow-details summary {
+  @apply cursor-pointer font-medium text-neutral-600;
+}
+
+.flow-details p {
+  @apply mt-2 leading-5;
+}
+
+.signed-in-sources {
+  @apply mt-8 rounded-2xl border border-neutral-200 bg-neutral-50 px-5 py-4 text-sm text-neutral-600;
+}
+
+.signed-in-sources summary {
+  @apply cursor-pointer font-medium text-neutral-800;
+}
+
+.signed-in-sources > div {
+  @apply mt-3 space-y-2 border-t border-neutral-200 pt-3;
+}
+
+.signed-in-sources p {
+  @apply flex items-center justify-between gap-4 text-xs;
+}
+
+.signed-in-sources a {
+  @apply font-medium text-neutral-900 underline underline-offset-4;
+}
+
+.run-complete {
+  @apply mt-10 flex flex-col gap-5 border-t border-neutral-200 py-7 sm:flex-row sm:items-center sm:justify-between;
+}
+
+.run-complete p {
+  @apply text-sm font-semibold text-neutral-900;
+}
+
+.run-complete span {
+  @apply mt-1 block text-xs text-neutral-500;
+}
+
+.run-complete a {
+  @apply rounded-full px-4 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100;
+}
+
+.run-complete .primary-link {
+  @apply bg-neutral-950 text-white hover:bg-neutral-700;
+}
+
+.screen-dialog {
+  @apply fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-5;
+}
+
+.screen-dialog-card {
+  @apply relative max-h-[94vh] max-w-6xl overflow-auto rounded-2xl bg-white p-3 shadow-2xl;
+}
+
+.screen-dialog-card > button {
+  @apply absolute right-5 top-5 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white text-neutral-800 shadow-md;
+}
+
+.screen-dialog-card img {
+  @apply max-h-[82vh] w-full rounded-xl object-contain;
+}
+
+.screen-dialog-card p {
+  @apply px-2 pb-1 pt-3 text-sm font-medium text-neutral-800;
+}
+
+@media (max-width: 640px) {
+  .research-home {
+    @apply pt-24;
+  }
+
+  .research-controls,
+  .run-prompt-controls {
+    @apply gap-2;
+  }
+
+  .research-submit,
+  .run-phase {
+    @apply ml-0;
+  }
+
+  .research-submit {
+    @apply ml-auto;
+  }
+
+  .run-prompt {
+    @apply p-4;
+  }
+}

@@ -1,0 +1,472 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Users (single-user dev auth today; modeled for multi-user from day one)
+// ---------------------------------------------------------------------------
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  researchRuns     ResearchRun[]
+  profileImports   CandidateProfileImport[]
+  policyImports    DecisionPolicyImport[]
+  approvalEvents   ApprovalEvent[]
+}
+
+// ---------------------------------------------------------------------------
+// Candidate profile + evidence library (Phase 1)
+// ---------------------------------------------------------------------------
+
+model CandidateProfileImport {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  version        Int
+  sourceFileHash String
+  schemaHash     String
+  status         ImportStatus @default(VALID)
+  rowCount       Int
+  errorCount     Int
+  errors         Json     @default("[]")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  fields  ProfileSchemaField[]
+  records ProfileRecord[]
+
+  @@unique([userId, version])
+  @@index([userId, isActive])
+}
+
+model ProfileSchemaField {
+  id         String                  @id @default(cuid())
+  importId   String
+  import     CandidateProfileImport  @relation(fields: [importId], references: [id], onDelete: Cascade)
+  order      Int
+  columnName String
+  dataType   String
+  required   Boolean @default(false)
+  description String @default("")
+
+  @@index([importId])
+}
+
+model ProfileRecord {
+  id         String                 @id @default(cuid())
+  importId   String
+  import     CandidateProfileImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  rowIndex   Int
+  evidenceId String?
+  kind       ProfileRecordKind      @default(GENERIC)
+  title      String?
+  data       Json
+  rawRow     Json
+
+  evidenceMatches EvidenceMatch[]
+
+  @@index([importId, kind])
+  @@index([importId, evidenceId])
+}
+
+enum ProfileRecordKind {
+  PROJECT
+  SKILL
+  EXPERIENCE
+  EDUCATION
+  FACT
+  CONSTRAINT
+  GENERIC
+}
+
+// ---------------------------------------------------------------------------
+// Decision policy (Phase 1)
+// ---------------------------------------------------------------------------
+
+model DecisionPolicyImport {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  version        Int
+  sourceFileHash String
+  status         ImportStatus @default(VALID)
+  rowCount       Int
+  errorCount     Int
+  errors         Json     @default("[]")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  rules PolicyRule[]
+
+  @@unique([userId, version])
+  @@index([userId, isActive])
+}
+
+model PolicyRule {
+  id       String                @id @default(cuid())
+  importId String
+  import   DecisionPolicyImport  @relation(fields: [importId], references: [id], onDelete: Cascade)
+  rowIndex Int
+  code     String
+  category String
+  field    String
+  operator String
+  value    String
+  action   PolicyAction
+  reason   String
+  active   Boolean @default(true)
+  raw      Json
+
+  @@index([importId, category])
+}
+
+enum PolicyAction {
+  HARD_BLOCK
+  BOOST
+  PENALTY
+  REVIEW
+  NEUTRAL
+}
+
+enum ImportStatus {
+  VALID
+  INVALID
+}
+
+// ---------------------------------------------------------------------------
+// Research runs and discovery flows (Phases 2-3)
+// ---------------------------------------------------------------------------
+
+model ResearchRun {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  userGoal          String
+  requestedFlowCount Int
+  mode              String   @default("READ_ONLY")
+  status            ResearchRunStatus @default(PLANNING)
+  createdAt         DateTime @default(now())
+  completedAt       DateTime?
+
+  flows DiscoveryFlow[]
+
+  @@index([userId, createdAt])
+}
+
+enum ResearchRunStatus {
+  PLANNING
+  QUEUED
+  RUNNING
+  COMPLETED
+  CANCELLED
+  PARTIAL_FAILURE
+  FAILED
+}
+
+model DiscoveryFlow {
+  id                String   @id @default(cuid())
+  researchRunId     String
+  researchRun       ResearchRun @relation(fields: [researchRunId], references: [id], onDelete: Cascade)
+  source            String
+  title             String
+  startUrl          String
+  goal              String
+  stopCondition     String
+  allowedDomains    String[]
+  allowedActions    String[]
+  maxPages          Int
+  maxSteps          Int
+  maxDurationSeconds Int
+  status            FlowStatus @default(QUEUED)
+  failureCategory   String?
+  cancellationRequested Boolean @default(false)
+  jobsDiscovered    Int @default(0)
+  jobsNormalized    Int @default(0)
+  jobsApplyCandidate Int @default(0)
+  jobsReviewRequired Int @default(0)
+  jobsSkipped       Int @default(0)
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime @default(now())
+
+  observations BrowserObservation[]
+  events       BrowserEvent[]
+  screenshots  ScreenshotArtifact[]
+  candidates   ExtractedJobCandidate[]
+
+  @@index([researchRunId])
+}
+
+enum FlowStatus {
+  QUEUED
+  OPENING_BROWSER
+  OPEN_PAGE
+  SEARCHING
+  OPENING_JOB_DETAIL
+  EXTRACTING
+  EVALUATING
+  COMPLETE
+  FAILED
+  CANCELLED
+}
+
+model BrowserObservation {
+  id                 String   @id @default(cuid())
+  flowId             String
+  flow               DiscoveryFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  observationVersion String
+  url                String
+  title              String
+  visibleTextSummary String
+  elements           Json
+  screenshotArtifactId String?
+  capturedAt         DateTime @default(now())
+
+  @@index([flowId, capturedAt])
+}
+
+model BrowserEvent {
+  id        String   @id @default(cuid())
+  flowId    String
+  flow      DiscoveryFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  kind      String
+  label     String
+  data      Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([flowId, createdAt])
+}
+
+model ScreenshotArtifact {
+  id        String   @id @default(cuid())
+  flowId    String
+  flow      DiscoveryFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  stepLabel String
+  storageDriver String
+  storagePath String
+  width     Int
+  height    Int
+  createdAt DateTime @default(now())
+
+  @@index([flowId, createdAt])
+}
+
+model ExtractedJobCandidate {
+  id           String   @id @default(cuid())
+  flowId       String
+  flow         DiscoveryFlow @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  rawPayload   Json
+  confidence   Float
+  extractedAt  DateTime @default(now())
+
+  jobPosting   JobPosting?
+
+  @@index([flowId])
+}
+
+// ---------------------------------------------------------------------------
+// Normalized jobs, evaluation, evidence, decisions (Phases 4-7)
+// ---------------------------------------------------------------------------
+
+model JobPosting {
+  id                String   @id @default(cuid())
+  candidateId       String?  @unique
+  candidate         ExtractedJobCandidate? @relation(fields: [candidateId], references: [id])
+  source            String
+  sourceUrl         String?
+  sourceExternalId  String?
+  title             String
+  company           String?
+  location          String?
+  country           String?
+  workplaceType     WorkplaceType @default(UNKNOWN)
+  employmentType    EmploymentType @default(UNKNOWN)
+  seniority         Seniority @default(UNKNOWN)
+  postedAt          DateTime?
+  salaryMin         Float?
+  salaryMax         Float?
+  salaryCurrency    String?
+  descriptionRaw    String
+  responsibilities  String[]
+  requiredSkills    String[]
+  preferredSkills   String[]
+  visaRequirements  String[]
+  sourceRetrievedAt DateTime?
+  sourceOpenStatus  String   @default("UNKNOWN")
+  postedAtBasis     String   @default("UNKNOWN")
+  applicationDeadline DateTime?
+  eligibilityUncertainties String[]
+  dedupeKey         String
+  ingestSource      String @default("BROWSER_FLOW")
+  createdAt         DateTime @default(now())
+
+  evaluation      JobEvaluation?
+  evidenceMatches EvidenceMatch[]
+  decisionAudits  DecisionAudit[]
+  coverLetters    CoverLetterDraft[]
+
+  @@index([dedupeKey])
+  @@index([sourceUrl])
+}
+
+enum WorkplaceType {
+  REMOTE
+  HYBRID
+  ONSITE
+  UNKNOWN
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  CASUAL
+  FIXED_TERM
+  UNKNOWN
+}
+
+enum Seniority {
+  ENTRY
+  MID
+  SENIOR
+  LEAD
+  UNKNOWN
+}
+
+model JobEvaluation {
+  id                   String   @id @default(cuid())
+  jobId                String   @unique
+  job                  JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  policyVersion        String
+  profileVersion       String
+  hardBlockers         Json     @default("[]")
+  softPreferenceSignals Json    @default("[]")
+  deepReviewReasons     Json    @default("[]")
+  explanationFacts      Json    @default("[]")
+  decision              JobDecision
+  roleFitScore          Int?
+  skillsFitScore        Int?
+  seniorityFitScore     Int?
+  strategicValueScore   Int?
+  missingCriticalInfo   Boolean?
+  redFlagLikely         Boolean?
+  decisionConfidence    Float?
+  decisionProvider      String
+  createdAt              DateTime @default(now())
+
+  @@index([decision])
+}
+
+enum JobDecision {
+  APPLY_CANDIDATE
+  REVIEW_REQUIRED
+  SKIP
+}
+
+model EvidenceMatch {
+  id                     String   @id @default(cuid())
+  jobId                  String
+  job                    JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  profileRecordId        String
+  profileRecord          ProfileRecord @relation(fields: [profileRecordId], references: [id], onDelete: Cascade)
+  category               EvidenceCategory
+  supportedRequirements  String[]
+  unsupportedRequirements String[]
+  safeClaims             String[]
+  forbiddenClaims        String[]
+  confidence             Float
+  createdAt              DateTime @default(now())
+
+  @@index([jobId])
+  @@index([profileRecordId])
+}
+
+enum EvidenceCategory {
+  DIRECT
+  STRONG_ADJACENT
+  WEAK_ADJACENT
+  NOT_RELEVANT
+  EVIDENCE_GAP
+}
+
+model DecisionAudit {
+  id             String   @id @default(cuid())
+  jobId          String
+  job            JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  provider       String
+  question       String
+  inputState     Json
+  outputResult   Json
+  observationVersion String?
+  createdAt      DateTime @default(now())
+
+  @@index([jobId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Cover-letter safety (Phase 9)
+// ---------------------------------------------------------------------------
+
+model CoverLetterDraft {
+  id           String   @id @default(cuid())
+  jobId        String
+  job          JobPosting @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  provider     String
+  draftText    String
+  status       CoverLetterStatus @default(DRAFT)
+  createdAt    DateTime @default(now())
+
+  claims ClaimVerification[]
+
+  @@index([jobId])
+}
+
+enum CoverLetterStatus {
+  DRAFT
+  BLOCKED
+  READY
+}
+
+model ClaimVerification {
+  id          String   @id @default(cuid())
+  draftId     String
+  draft       CoverLetterDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  claimText   String
+  status      ClaimStatus
+  evidenceId  String?
+  reason      String
+  createdAt   DateTime @default(now())
+
+  @@index([draftId])
+}
+
+enum ClaimStatus {
+  SUPPORTED
+  PARTIALLY_SUPPORTED
+  AMBIGUOUS
+  UNSUPPORTED
+}
+
+// ---------------------------------------------------------------------------
+// Approvals (Security)
+// ---------------------------------------------------------------------------
+
+model ApprovalEvent {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  action        String
+  actionSummary String
+  context       Json
+  createdAt     DateTime @default(now())
+
+  @@index([userId, createdAt])
+}

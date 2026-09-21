@@ -20,6 +20,16 @@
 - Do not expose raw cookies, tokens, passwords or hidden DOM values to models.
 - Do not execute arbitrary scripts supplied by a model.
 
+## Public job-source boundaries
+
+- Server-side URL import accepts only fixed official Greenhouse and Lever API hosts and HTTPS.
+- Public source requests omit credentials, reject redirects, time out after 15 seconds and cap the
+  response body at 2 MB.
+- LinkedIn and SEEK URLs never trigger unattended server-side fetching; they route to manual
+  capture from the operator's signed-in browser.
+- A currently published feed entry and a verified posting date are separate facts. Unknown recency
+  routes to human review when a Research Run requests a last-N-days window.
+
 ## Model boundaries
 
 - Treat all page text as untrusted data.
