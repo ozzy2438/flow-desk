@@ -10,7 +10,7 @@ You type a research goal into a chat box, for example:
 
 > Find Melbourne or remote Data Scientist, AI Engineer, Applied AI Engineer, Frontend Engineer and Automation Engineer roles from the last 7 days. Include contract, fixed-term and independent-delivery-compatible opportunities. Only show me postings that a strong application can be built for from my verified evidence library.
 
-The planner turns the request into up to 10 structured discovery flows against an allowlisted source registry. Each automatic flow runs in an isolated Playwright browser context. Jev chooses the next action only from the safe candidates supplied by code and separately decides which page states add a distinct screenshot to the flow story. Screenshots and step events stream back to the UI over SSE as source galleries, so you see the flows working in parallel. Each discovered job is then normalized, filtered by a deterministic policy engine, evaluated by a separate typed job-decision provider, matched against your evidence library, and routed into apply / review / skip.
+The interface follows one short sequence: write the research request, choose 1-10 flows, read the generated plan, then watch those browser flows work in parallel. Jev chooses the next action only from the safe candidates supplied by code and separately decides which page states add a distinct screenshot to the visual story. Job normalization, evidence matching, policy routing and detailed events still run underneath, but they stay out of the core research surface.
 
 ## Quickstart
 
@@ -41,10 +41,11 @@ Run the test suite with `pnpm test` (policy engine, CSV/JSON import, public ATS 
 
 Flow Desk now has two explicit live-source paths:
 
-1. **Greenhouse and Lever company boards** — expand **Add public Greenhouse or Lever company
-   boards** on the Research form and paste one public company-board URL per line. Each source uses
-   the vendor's official unauthenticated read API for source facts, while a bounded browser session
-   opens approved public detail pages and produces the visual flow.
+1. **Greenhouse and Lever company boards** — include a supported public company-board URL directly
+   in the research request. Flow Desk detects it and splits the requested number of flows into
+   distinct research angles. Each flow uses the vendor's official unauthenticated read API for
+   source facts, while a bounded browser session opens approved public detail pages and produces
+   the visual flow.
 2. **LinkedIn, SEEK and other session-bound sources** — open the job in your normal signed-in
    browser, then use **Job Inbox → Paste a LinkedIn, SEEK or other job** with the source URL and
    full visible description. Flow Desk does not copy browser cookies, automate login, bypass
@@ -69,7 +70,7 @@ Short answer: **no key is required to run this end to end.** Every external prov
 
 - **Jev providers**: the browser provider chooses code-owned actions and distinct screens; the job provider scores role/skills/seniority fit and routing. Demo mode uses deterministic implementations for both. Set `APP_MODE=live` and `JEV_API_KEY` to activate the live TypeSafe endpoint.
 - **Cover-letter drafting**: a template generator that can only ever emit the job title/company and safe claims evidence matching already produced by default; set `OPENAI_API_KEY` to switch to live drafting. Every draft - from either provider - goes through the same claim-verification pipeline before it can reach Ready status.
-- **Browser worker and public ATS flows**: demo mode uses isolated Playwright contexts against the bundled local board. Operator-supplied Greenhouse or Lever boards combine official public GET data with visual capture of approved hosted job pages. LinkedIn and SEEK appear as explicit attended-handoff cards; Flow Desk never automates their login, CAPTCHA or Apply surfaces.
+- **Browser worker and public ATS flows**: demo mode uses isolated Playwright contexts against the bundled local board. Operator-supplied Greenhouse or Lever boards combine official public GET data with visual capture of approved hosted job pages. LinkedIn and SEEK create one compact signed-in-browser disclosure only when named in the request; Flow Desk never automates their login, CAPTCHA or Apply surfaces.
 - **Exa / Tavily / Apify**: not wired up. `docs/data-apis.md` covers when you'd want them for broader discovery. They are not required for the built-in Greenhouse/Lever public ATS path.
 
 ## Non-negotiable safety rules

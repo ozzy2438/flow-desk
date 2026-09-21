@@ -233,7 +233,7 @@ async function isCancelled(flowId: string): Promise<boolean> {
  * finishes in under a second. Not used for correctness anywhere; set to 0 to
  * run at full speed (e.g. in CI).
  */
-const STEP_PACE_MS = Number(process.env.BROWSER_STEP_PACE_MS ?? 350);
+const STEP_PACE_MS = Number(process.env.BROWSER_STEP_PACE_MS ?? 800);
 
 function categorizeFailure(error: unknown): string {
   if (error instanceof DomainNotAllowedError) return "POLICY_BLOCKED";

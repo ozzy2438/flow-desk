@@ -6,6 +6,20 @@ import {
 import { getEnv } from "../env";
 import { discoveryFlowCandidateSchema, type DiscoveryFlowCandidate } from "./schema";
 import { parsePublicAtsBoardUrl } from "../jobSources/publicAts";
+import type { SourceDefinition } from "../browser/sourceRegistry";
+
+const RESEARCH_ANGLES = [
+  { label: "Direct results", prompt: "Find the strongest direct results for the request." },
+  { label: "Alternatives", prompt: "Look for credible alternatives and adjacent results." },
+  { label: "Requirements", prompt: "Inspect the most important requirements and constraints." },
+  { label: "Recency", prompt: "Prioritize current, still-available information." },
+  { label: "Location", prompt: "Check location and access constraints carefully." },
+  { label: "Comparison", prompt: "Capture information that helps compare the strongest results." },
+  { label: "Risks", prompt: "Look for blockers, uncertainty, or missing information." },
+  { label: "Evidence", prompt: "Capture the clearest supporting evidence from the source." },
+  { label: "Availability", prompt: "Verify that the result remains available at research time." },
+  { label: "Summary", prompt: "Find one final result that improves the overall research picture." },
+] as const;
 
 /**
  * AGENCY_BRIEF.md Phase 2: turns a free-text goal into up to
@@ -31,23 +45,21 @@ export async function planDiscoveryFlows(
       (source.id === "LINKEDIN_MANUAL" && sourceOptions.linkedIn !== false) ||
       (source.id === "SEEK_MANUAL" && sourceOptions.seek !== false),
   );
-  const fallbackSources = env.APP_MODE === "live" ? [...manualSources, ...SOURCE_REGISTRY] : SOURCE_REGISTRY;
-  const availableSources =
-    configuredSources.length > 0
-      ? [...configuredSources, ...manualSources]
-      : fallbackSources;
+  const automaticSources = configuredSources.length > 0 ? configuredSources : SOURCE_REGISTRY;
+  const availableSources = [...manualSources, ...automaticSources];
   const ranked = [...availableSources].sort(
     (a, b) => relevance(b.id, lowerGoal) - relevance(a.id, lowerGoal),
   );
-  const selected = ranked.slice(0, Math.min(requestedFlowCount, ranked.length));
+  const selected = expandToRequestedCount(ranked, automaticSources, requestedFlowCount);
 
   const candidates = await Promise.all(
-    selected.map(async (source) => {
+    selected.map(async ({ source, angle }) => {
+      const repeated = selected.filter((item) => item.source.id === source.id).length > 1;
       const candidate = {
         source: source.id,
-        title: source.label,
+        title: (repeated ? `${source.label} · ${angle.label}` : source.label).slice(0, 120),
         startUrl: await source.resolveStartUrl(),
-        goal: `${source.defaultGoal} User's research goal: "${goal}".`,
+        goal: `${source.defaultGoal} ${angle.prompt} User request: "${compact(goal, 260)}".`.slice(0, 500),
         stopCondition: source.defaultStopCondition,
         allowedDomains: source.allowedDomains,
         allowedActions: ALL_ALLOWED_ACTIONS,
@@ -60,6 +72,34 @@ export async function planDiscoveryFlows(
   );
 
   return candidates;
+}
+
+function expandToRequestedCount(
+  rankedSources: SourceDefinition[],
+  automaticSources: SourceDefinition[],
+  requestedFlowCount: number,
+) {
+  const selected = rankedSources.slice(0, requestedFlowCount).map((source, index) => ({
+    source,
+    angle: RESEARCH_ANGLES[index % RESEARCH_ANGLES.length]!,
+  }));
+  const repeatPool = automaticSources.length > 0 ? automaticSources : rankedSources;
+  let repeatIndex = 0;
+
+  while (selected.length < requestedFlowCount && repeatPool.length > 0) {
+    selected.push({
+      source: repeatPool[repeatIndex % repeatPool.length]!,
+      angle: RESEARCH_ANGLES[selected.length % RESEARCH_ANGLES.length]!,
+    });
+    repeatIndex += 1;
+  }
+
+  return selected;
+}
+
+function compact(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1).trim()}…` : normalized;
 }
 
 function relevance(sourceId: string, lowerGoal: string): number {

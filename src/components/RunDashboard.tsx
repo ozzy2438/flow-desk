@@ -1,27 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, CircleNotch, StopCircle, X } from "@phosphor-icons/react";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 
 type FlowEvent = {
   id: string;
   kind: string;
   label: string;
   createdAt: string;
-  data?: Record<string, unknown>;
 };
 
 type FlowSnapshot = {
   id: string;
   source: string;
   title: string;
+  startUrl: string;
+  goal: string;
   status: string;
   failureCategory: string | null;
-  jobsDiscovered: number;
-  jobsNormalized: number;
-  jobsApplyCandidate: number;
-  jobsReviewRequired: number;
-  jobsSkipped: number;
   startedAt: string | null;
   finishedAt: string | null;
   screenshots: Array<{ id: string; stepLabel: string; createdAt: string }>;
@@ -37,216 +34,26 @@ type RunSnapshot = {
   flows: FlowSnapshot[];
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  QUEUED: "Queued",
+const TERMINAL_RUN_STATUSES = new Set(["COMPLETED", "CANCELLED", "PARTIAL_FAILURE", "FAILED"]);
+const TERMINAL_FLOW_STATUSES = new Set(["COMPLETE", "FAILED", "CANCELLED"]);
+
+const FLOW_STATUS_LABEL: Record<string, string> = {
+  QUEUED: "Waiting",
   OPENING_BROWSER: "Opening browser",
-  OPEN_PAGE: "Reading source",
-  SEARCHING: "Searching",
-  OPENING_JOB_DETAIL: "Opening detail",
-  EXTRACTING: "Extracting",
-  EVALUATING: "Matching evidence",
+  OPEN_PAGE: "Opening page",
+  SEARCHING: "Researching",
+  OPENING_JOB_DETAIL: "Navigating",
+  EXTRACTING: "Reading result",
+  EVALUATING: "Finishing",
   COMPLETE: "Complete",
-  FAILED: "Needs handoff",
+  FAILED: "Stopped",
   CANCELLED: "Stopped",
 };
-
-const STATUS_STYLE: Record<string, string> = {
-  QUEUED: "bg-slate-100 text-slate-600",
-  OPENING_BROWSER: "bg-blue-50 text-blue-700",
-  OPEN_PAGE: "bg-blue-50 text-blue-700",
-  SEARCHING: "bg-blue-50 text-blue-700",
-  OPENING_JOB_DETAIL: "bg-violet-50 text-violet-700",
-  EXTRACTING: "bg-violet-50 text-violet-700",
-  EVALUATING: "bg-amber-50 text-amber-700",
-  COMPLETE: "bg-[#eefbe7] text-[#32752a]",
-  FAILED: "bg-rose-50 text-rose-700",
-  CANCELLED: "bg-slate-100 text-slate-600",
-};
-
-const RUN_STATUS_LABEL: Record<string, string> = {
-  QUEUED: "Queued",
-  RUNNING: "Running",
-  COMPLETED: "Complete",
-  PARTIAL_FAILURE: "Complete with handoffs",
-  FAILED: "Needs attention",
-  CANCELLED: "Stopped",
-};
-
-const FAILURE_MESSAGES: Record<string, string> = {
-  LOGIN_REQUIRED:
-    "This source needs your signed-in browser. Flow Desk stopped before cookies, login, CAPTCHA, or anti-bot controls.",
-  CAPTCHA: "Human verification appeared. The flow stopped without trying to bypass it.",
-  RATE_LIMITED: "The source limited requests. Retry later or inspect it manually.",
-  TIMEOUT: "The page did not reach a usable state within the flow budget.",
-  NETWORK: "A network error interrupted this source.",
-  EXTRACTION_INCOMPLETE: "Critical job fields were not visible, so the result needs review.",
-  POLICY_BLOCKED: "The source or requested action is outside the read-only policy.",
-  UNKNOWN: "The source stopped unexpectedly.",
-};
-
-function elapsed(startedAt: string | null, finishedAt: string | null): string {
-  if (!startedAt) return "Waiting";
-  const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
-  const seconds = Math.max(0, Math.round((end - new Date(startedAt).getTime()) / 1000));
-  return `${seconds}s`;
-}
-
-function FlowCard({ flow, onStop }: { flow: FlowSnapshot; onStop: (flowId: string) => void }) {
-  const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
-  const isTerminal = ["COMPLETE", "FAILED", "CANCELLED"].includes(flow.status);
-  const latestEvent = flow.events[0];
-  const latestJevEvent = flow.events.find(
-    (event) => event.kind === "BROWSER_DECISION" && event.data?.provider === "JEV",
-  );
-  const selectedShot = flow.screenshots.find((shot) => shot.id === selectedShotId);
-  const manualHandoff = flow.failureCategory === "LOGIN_REQUIRED";
-
-  return (
-    <article className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_55px_rgba(15,23,42,0.06)]">
-      <header className="flex flex-col gap-4 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="truncate text-base font-semibold text-slate-950">{flow.title}</h2>
-            {latestJevEvent && (
-              <span className="rounded-full bg-slate-950 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white">
-                JEV driven
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-xs text-slate-500">
-            {elapsed(flow.startedAt, flow.finishedAt)} · {latestEvent?.label ?? "Waiting to start"}
-          </p>
-        </div>
-        <div className="flex flex-none items-center gap-2">
-          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_STYLE[flow.status] ?? STATUS_STYLE.QUEUED}`}>
-            {STATUS_LABEL[flow.status] ?? flow.status}
-          </span>
-          {!isTerminal && (
-            <button
-              type="button"
-              onClick={() => onStop(flow.id)}
-              className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-            >
-              Stop
-            </button>
-          )}
-        </div>
-      </header>
-
-      <div className="p-5">
-        {flow.screenshots.length > 0 ? (
-          <div className="flow-shot-rail" aria-label={`${flow.title} browser screens`}>
-            {flow.screenshots.map((shot, index) => (
-              <button
-                type="button"
-                key={shot.id}
-                onClick={() => setSelectedShotId(shot.id)}
-                className="group w-[290px] flex-none text-left"
-              >
-                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-sm transition group-hover:-translate-y-0.5 group-hover:shadow-md">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={`/api/screenshots/${shot.id}`}
-                    alt={shot.stepLabel}
-                    className="h-44 w-full object-cover object-top"
-                  />
-                </div>
-                <p className="mt-2 line-clamp-2 text-xs font-medium leading-5 text-slate-700">
-                  <span className="mr-1 text-slate-400">{String(index + 1).padStart(2, "0")}</span>
-                  {shot.stepLabel}
-                </p>
-              </button>
-            ))}
-          </div>
-        ) : manualHandoff ? (
-          <div className="flex flex-col gap-4 rounded-2xl border border-dashed border-amber-300 bg-amber-50/60 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-amber-950">Your browser takes this step</p>
-              <p className="mt-1 max-w-2xl text-xs leading-5 text-amber-800">
-                {FAILURE_MESSAGES.LOGIN_REQUIRED}
-              </p>
-            </div>
-            <Link
-              href="/inbox"
-              className="flex-none rounded-full bg-amber-950 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-900"
-            >
-              Capture visible job
-            </Link>
-          </div>
-        ) : (
-          <div className="h-44 animate-pulse rounded-2xl border border-slate-200 bg-slate-100 p-5">
-            <p className="text-xs font-medium text-slate-400">Browser screen is arriving…</p>
-          </div>
-        )}
-
-        <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-          <div>
-            {flow.failureCategory && !manualHandoff && (
-              <p className="mb-3 rounded-xl bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-700">
-                {FAILURE_MESSAGES[flow.failureCategory] ?? FAILURE_MESSAGES.UNKNOWN}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
-              {flow.events.slice(0, 4).map((event) => (
-                <p key={event.id} className="max-w-sm truncate">
-                  <span className="font-semibold text-slate-700">{event.kind.replaceAll("_", " ")}</span>{" "}
-                  {event.label}
-                </p>
-              ))}
-            </div>
-          </div>
-          <div className="grid grid-cols-4 gap-2 text-center">
-            <Stat label="Found" value={flow.jobsDiscovered} />
-            <Stat label="Apply" value={flow.jobsApplyCandidate} tone="text-emerald-700" />
-            <Stat label="Review" value={flow.jobsReviewRequired} tone="text-amber-700" />
-            <Stat label="Skip" value={flow.jobsSkipped} tone="text-slate-500" />
-          </div>
-        </div>
-      </div>
-
-      {selectedShot && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-5"
-          role="dialog"
-          aria-modal="true"
-          aria-label={selectedShot.stepLabel}
-          onClick={() => setSelectedShotId(null)}
-        >
-          <div className="max-h-[92vh] max-w-6xl overflow-hidden rounded-3xl bg-white p-3" onClick={(event) => event.stopPropagation()}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={`/api/screenshots/${selectedShot.id}`}
-              alt={selectedShot.stepLabel}
-              className="max-h-[80vh] w-full rounded-2xl object-contain"
-            />
-            <div className="flex items-center justify-between gap-4 px-2 pb-1 pt-3">
-              <p className="text-sm font-medium text-slate-800">{selectedShot.stepLabel}</p>
-              <button
-                type="button"
-                onClick={() => setSelectedShotId(null)}
-                className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </article>
-  );
-}
-
-function Stat({ label, value, tone }: { label: string; value: number; tone?: string }) {
-  return (
-    <div className="min-w-14 rounded-xl bg-slate-50 px-2 py-2">
-      <p className={`text-sm font-semibold ${tone ?? "text-slate-800"}`}>{value}</p>
-      <p className="mt-0.5 text-[10px] uppercase tracking-wide text-slate-400">{label}</p>
-    </div>
-  );
-}
 
 export function RunDashboard({ runId, initialRun }: { runId: string; initialRun: RunSnapshot }) {
   const [run, setRun] = useState<RunSnapshot>(initialRun);
+  const [holdPlanOpen, setHoldPlanOpen] = useState(!TERMINAL_RUN_STATUSES.has(initialRun.status));
+  const hasAnyScreens = run.flows.some((flow) => flow.screenshots.length > 0);
 
   useEffect(() => {
     const source = new EventSource(`/api/runs/${runId}/events`);
@@ -254,87 +61,288 @@ export function RunDashboard({ runId, initialRun }: { runId: string; initialRun:
       try {
         setRun(JSON.parse(event.data) as RunSnapshot);
       } catch {
-        // Ignore a malformed frame and keep the last verified snapshot.
+        // Keep the last verified state if a stream frame is malformed.
       }
     };
     source.addEventListener("done", () => source.close());
     return () => source.close();
   }, [runId]);
 
-  const totals = useMemo(
-    () =>
-      run.flows.reduce(
-        (acc, flow) => ({
-          discovered: acc.discovered + flow.jobsDiscovered,
-          normalized: acc.normalized + flow.jobsNormalized,
-          apply: acc.apply + flow.jobsApplyCandidate,
-          review: acc.review + flow.jobsReviewRequired,
-          skip: acc.skip + flow.jobsSkipped,
-          screens: acc.screens + flow.screenshots.length,
-        }),
-        { discovered: 0, normalized: 0, apply: 0, review: 0, skip: 0, screens: 0 },
-      ),
+  useEffect(() => {
+    if (!holdPlanOpen || !hasAnyScreens) return;
+    const timer = window.setTimeout(() => setHoldPlanOpen(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [holdPlanOpen, hasAnyScreens]);
+
+  const automaticFlows = useMemo(
+    () => run.flows.filter((flow) => flow.failureCategory !== "LOGIN_REQUIRED"),
     [run.flows],
   );
-  const isTerminal = ["COMPLETED", "CANCELLED", "PARTIAL_FAILURE", "FAILED"].includes(run.status);
+  const handoffFlows = useMemo(
+    () => run.flows.filter((flow) => flow.failureCategory === "LOGIN_REQUIRED"),
+    [run.flows],
+  );
+  const screenCount = automaticFlows.reduce((sum, flow) => sum + flow.screenshots.length, 0);
+  const isTerminal = TERMINAL_RUN_STATUSES.has(run.status);
+  const planExpanded = holdPlanOpen || (screenCount === 0 && !isTerminal);
+  const phase = isTerminal ? "Complete" : planExpanded ? "Planning" : "Researching";
 
-  async function handleStopFlow(flowId: string) {
-    await fetch(`/api/flows/${flowId}/stop`, { method: "POST" });
-  }
-
-  async function handleStopAll() {
+  async function stopAll() {
     await fetch(`/api/runs/${runId}/stop`, { method: "POST" });
   }
 
   return (
-    <div className="mx-auto flex max-w-[1400px] flex-col gap-6 pb-16 pt-2">
-      <section className="rounded-[32px] bg-slate-950 px-6 py-7 text-white sm:px-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-              Live browser research · {run.mode.endsWith("MOBILE_WEB") ? "Mobile web" : "Desktop"}
-            </p>
-            <h1 className="mt-3 max-w-4xl text-2xl font-semibold leading-tight tracking-[-0.03em] sm:text-3xl">
-              {run.userGoal}
-            </h1>
-            <p className="mt-4 text-sm text-slate-400">
-              {run.flows.length} source flows · {totals.screens} distinct screens · {totals.discovered} jobs found
-            </p>
-          </div>
-          <div className="flex flex-none items-center gap-2">
-            <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white">
-              {RUN_STATUS_LABEL[run.status] ?? run.status.replaceAll("_", " ")}
-            </span>
-            {!isTerminal && (
-              <button
-                type="button"
-                onClick={handleStopAll}
-                className="rounded-full border border-white/20 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10"
-              >
-                Stop all
-              </button>
-            )}
-          </div>
-        </div>
-      </section>
+    <div className="run-page">
+      <div className="run-shell">
+        <Link href="/" className="new-research-link">
+          <ArrowLeft size={15} weight="bold" />
+          New research
+        </Link>
 
-      {run.flows.map((flow) => (
-        <FlowCard key={flow.id} flow={flow} onStop={handleStopFlow} />
-      ))}
-
-      {isTerminal && (
-        <section className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Research landed</p>
-            <p className="mt-1 text-sm text-slate-600">
-              {totals.normalized} evaluated · {totals.apply} strong apply · {totals.review} review · {totals.skip} skipped
-            </p>
+        <section className="run-prompt" aria-label="Active research request">
+          <p>{run.userGoal}</p>
+          <div className="run-prompt-controls">
+            <div className="flow-control is-locked">
+              <span>Flows</span>
+              <strong>{run.flows.length}</strong>
+              <input
+                type="range"
+                min={1}
+                max={10}
+                value={Math.max(1, run.flows.length)}
+                disabled
+                aria-label={`${run.flows.length} research flows`}
+              />
+            </div>
+            <div className="device-toggle is-locked" aria-label="Selected browser viewport">
+              <span className={!run.mode.endsWith("MOBILE_WEB") ? "is-active" : ""}>Desktop</span>
+              <span className={run.mode.endsWith("MOBILE_WEB") ? "is-active" : ""}>Mobile web</span>
+            </div>
+            <div className="run-phase" aria-live="polite">
+              {!isTerminal && <CircleNotch size={17} className="animate-spin" />}
+              <span>{phase}</span>
+              {!isTerminal && (
+                <button type="button" onClick={stopAll} aria-label="Stop all research flows">
+                  <StopCircle size={19} />
+                </button>
+              )}
+            </div>
           </div>
-          <Link href="/desk" className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white">
-            Open Daily Desk
-          </Link>
         </section>
-      )}
+
+        {planExpanded ? (
+          <section className="plan-section" aria-labelledby="plan-title">
+            <h1 id="plan-title">{researchTitle(run.userGoal)}</h1>
+            <p className="plan-summary">
+              {run.flows.length} parallel browser flows are researching this request and capturing the useful steps.
+            </p>
+            <div className="plan-list">
+              {run.flows.map((flow, index) => (
+                <PlanRow key={flow.id} flow={flow} index={index} request={run.userGoal} />
+              ))}
+            </div>
+          </section>
+        ) : (
+          <details className="compact-plan">
+            <summary>
+              <span>{researchTitle(run.userGoal)}</span>
+              <small>{run.flows.length} flows planned</small>
+            </summary>
+            <div className="plan-list">
+              {run.flows.map((flow, index) => (
+                <PlanRow key={flow.id} flow={flow} index={index} request={run.userGoal} />
+              ))}
+            </div>
+          </details>
+        )}
+
+        {automaticFlows.length > 0 && (
+          <section className="live-section" aria-label="Live browser research">
+            {automaticFlows.map((flow, index) => (
+              <LiveFlow key={flow.id} flow={flow} index={index} />
+            ))}
+          </section>
+        )}
+
+        {handoffFlows.length > 0 && <SignedInSources flows={handoffFlows} />}
+
+        {isTerminal && (
+          <footer className="run-complete">
+            <div>
+              <p>Research complete</p>
+              <span>
+                {screenCount} useful screens captured across {automaticFlows.length} browser flows.
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <Link href="/">Run another</Link>
+              <Link href="/desk" className="primary-link">
+                View results
+              </Link>
+            </div>
+          </footer>
+        )}
+      </div>
     </div>
   );
+}
+
+function PlanRow({ flow, index, request }: { flow: FlowSnapshot; index: number; request: string }) {
+  const manual = flow.failureCategory === "LOGIN_REQUIRED";
+  const status = manual ? "Needs your browser" : FLOW_STATUS_LABEL[flow.status] ?? "Waiting";
+  return (
+    <article className="plan-row">
+      <span className="plan-number">{index + 1}</span>
+      <div className="min-w-0">
+        <h2>{displayFlowTitle(flow, index)}</h2>
+        <p className="plan-domain">{displayHost(flow.startUrl)}</p>
+        <p className="plan-copy">
+          {manual
+            ? "Continue in your signed-in browser and capture the visible result."
+            : `Research this source for “${shorten(request, 92)}”. Stop when a useful result is captured.`}
+        </p>
+      </div>
+      <StatusPill label={status} active={!TERMINAL_FLOW_STATUSES.has(flow.status)} />
+    </article>
+  );
+}
+
+function LiveFlow({ flow, index }: { flow: FlowSnapshot; index: number }) {
+  const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
+  const selectedShot = flow.screenshots.find((shot) => shot.id === selectedShotId);
+  const terminal = TERMINAL_FLOW_STATUSES.has(flow.status);
+  const status = FLOW_STATUS_LABEL[flow.status] ?? "Researching";
+
+  return (
+    <article className="live-flow">
+      <header className="live-flow-header">
+        <div className="min-w-0">
+          <h2>{displayFlowTitle(flow, index)}</h2>
+          <p>{displayHost(flow.startUrl)}</p>
+        </div>
+        <StatusPill label={status} active={!terminal} />
+      </header>
+
+      <div className="live-screen-rail" aria-label={`${displayFlowTitle(flow, index)} screens`}>
+        {flow.screenshots.length > 0
+          ? flow.screenshots.map((shot, shotIndex) => (
+              <button
+                type="button"
+                key={shot.id}
+                className="live-screen"
+                onClick={() => setSelectedShotId(shot.id)}
+              >
+                <div className="live-screen-image">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`/api/screenshots/${shot.id}`} alt={shot.stepLabel} />
+                  {!terminal && shotIndex === flow.screenshots.length - 1 && <span className="live-label">Live</span>}
+                </div>
+                <p>
+                  <span>{shotIndex + 1}</span>
+                  {plainStepLabel(shot.stepLabel)}
+                </p>
+              </button>
+            ))
+          : [0, 1, 2].map((placeholder) => (
+              <div key={placeholder} className="live-screen is-loading" aria-hidden="true">
+                <div className="live-screen-image" />
+                <p>{placeholder === 0 ? status : "Waiting for browser"}</p>
+              </div>
+            ))}
+      </div>
+
+      {flow.failureCategory && flow.failureCategory !== "LOGIN_REQUIRED" && (
+        <details className="flow-details">
+          <summary>Why this flow stopped</summary>
+          <p>{flow.events[0]?.label ?? "The browser could not continue safely."}</p>
+        </details>
+      )}
+
+      {selectedShot && (
+        <div
+          className="screen-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-label={selectedShot.stepLabel}
+          onClick={() => setSelectedShotId(null)}
+        >
+          <div className="screen-dialog-card" onClick={(event) => event.stopPropagation()}>
+            <button type="button" onClick={() => setSelectedShotId(null)} aria-label="Close screenshot">
+              <X size={19} weight="bold" />
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/api/screenshots/${selectedShot.id}`} alt={selectedShot.stepLabel} />
+            <p>{plainStepLabel(selectedShot.stepLabel)}</p>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function SignedInSources({ flows }: { flows: FlowSnapshot[] }) {
+  return (
+    <details className="signed-in-sources">
+      <summary>
+        {flows.length} signed-in {flows.length === 1 ? "source needs" : "sources need"} your browser
+      </summary>
+      <div>
+        {flows.map((flow, index) => (
+          <p key={flow.id}>
+            <span>{displayFlowTitle(flow, index)}</span>
+            <Link href="/inbox">Capture visible result</Link>
+          </p>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function StatusPill({ label, active }: { label: string; active: boolean }) {
+  return (
+    <span className="status-pill">
+      <span className={active ? "status-dot is-active" : "status-dot"} />
+      {label}
+    </span>
+  );
+}
+
+function displayFlowTitle(flow: FlowSnapshot, index: number): string {
+  if (flow.source === "LINKEDIN_MANUAL") return "LinkedIn research";
+  if (flow.source === "SEEK_MANUAL") return "SEEK research";
+  if (flow.title.startsWith("Demo board")) {
+    const suffix = flow.title.split("—")[1]?.trim();
+    return suffix ? `${titleCase(suffix)} research` : `Research flow ${index + 1}`;
+  }
+  return flow.title.replace(" · attended capture", "");
+}
+
+function displayHost(value: string): string {
+  try {
+    const url = new URL(value);
+    return url.hostname === "127.0.0.1" ? "Local research browser" : url.hostname.replace(/^www\./, "");
+  } catch {
+    return "Research source";
+  }
+}
+
+function researchTitle(value: string): string {
+  const cleaned = value.replace(/https:\/\/\S+/g, "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return "Research the request";
+  return titleCase(shorten(cleaned, 82));
+}
+
+function plainStepLabel(value: string): string {
+  return value
+    .replace(/^Open source$/i, "Open page")
+    .replace(/^Open job detail:\s*/i, "Open result · ")
+    .replace(/^Search results for\s*/i, "Search · ");
+}
+
+function shorten(value: string, length: number): string {
+  return value.length > length ? `${value.slice(0, length - 1).trim()}…` : value;
+}
+
+function titleCase(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
